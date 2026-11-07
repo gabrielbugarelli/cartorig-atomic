@@ -391,4 +391,17 @@ SceneResult MapScene::setRouteStyle(std::string_view objectId, Style style) {
     return {SceneError::MissingFeature, ""};
 }
 
+
+SceneResult MapScene::setRouteReveal(std::string_view objectId, double progress) {
+    if (!finite(progress) || progress < 0.0 || progress > 1.0)
+        return {SceneError::InvalidValue, ""};
+    for (auto& route : routes_) {
+        if (route.objectId == objectId) {
+            route.reveal = progress;
+            return {SceneError::None, route.objectId};
+        }
+    }
+    return {SceneError::MissingFeature, ""};
+}
+
 } // namespace cartorig
