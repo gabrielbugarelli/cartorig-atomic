@@ -1,0 +1,72 @@
+name: CartoRig Atomic - OpenFX native adapter
+
+on:
+  push:
+    branches: [feat/resolve-ofx-integration]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'tools/**'
+      - 'CMakeLists.txt'
+      - 'install/**'
+      - '.github/workflows/ofx-package.yml'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'tools/**'
+      - 'CMakeLists.txt'
+      - 'install/**'
+      - '.github/workflows/ofx-package.yml'
+  workflow_dispatch:
+
+jobs:
+  ofx-build:
+    name: Native OFX SDK compile (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch pinned AcademySoftwareFoundation OpenFX SDK
+        uses: actions/checkout@v4
+        with:
+          repository: AcademySoftwareFoundation/openfx
+          ref: b2d2eea3a64e511bfabb80e56f902d96adf4a05e
+          path: external/openfx
+      - name: Configure C++17 core and OpenFX adapter
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCARTORIG_BUILD_OFX=ON
+      - name: Compile native effect and core
+        run: cmake --build build --config Release --parallel
+      - name: Native core, renderer and Inspector session tests
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Verify Windows binary has exported OpenFX entry points
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $binary = (Get-ChildItem build -Recurse -Filter "CartoRigAtomic.ofx" | Select-Object -First 1).FullName
+          if (-not $binary) { throw 'Missing native OpenFX adapter binary' }
+          $dll = [System.Runtime.InteropServices.NativeLibrary]::Load($binary)
+          try {
+            foreach ($symbol in @('OfxGetNumberOfPlugins','OfxGetPlugin')) {
+              $pointer = [System.Runtime.InteropServices.NativeLibrary]::GetExport($dll, $symbol)
+              if ($pointer -eq [IntPtr]::Zero) { throw "Missing OpenFX ABI symbol $symbol" }
+              Write-Host "Validated native export $symbol"
+            }
+          } finally { [System.Runtime.InteropServices.NativeLibrary]::Free($dll) }
+      - name: Upload Windows native module
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: CartoRig-Atomic-Native-OFX-Win64
+          path: build/Release/CartoRigAtomic.ofx
+          if-no-files-found: error
+      - name: Upload Linux test binary
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: CartoRig-Atomic-Native-OFX-Linux64-Experimental
+          path: build/CartoRigAtomic.ofx
+          if-no-files-found: error
