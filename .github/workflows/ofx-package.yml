@@ -70,3 +70,70 @@ jobs:
           name: CartoRig-Atomic-Native-OFX-Linux64-Experimental
           path: build/CartoRigAtomic.ofx
           if-no-files-found: error
+
+  offline-catalog:
+    name: Verified Natural Earth data pack
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prepare offline geographic data (build environment only)
+        run: |
+          python -m pip install -r tools/requirements-build.txt
+          python tools/build_natural_earth.py --output dist/data/cartorig-natural-earth-10m.catalog
+      - name: Upload catalog and SHA256 source manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: CartoRig-Atomic-NaturalEarth-10m
+          path: dist/data/
+          if-no-files-found: error
+
+  windows-installer:
+    name: One-click Windows installer and OFX bundle
+    runs-on: windows-latest
+    needs: [ofx-build, offline-catalog]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: CartoRig-Atomic-Native-OFX-Win64
+          path: dist/native
+      - uses: actions/download-artifact@v4
+        with:
+          name: CartoRig-Atomic-NaturalEarth-10m
+          path: dist/data
+      - name: Verify artifact files and assemble standard OFX bundle
+        shell: pwsh
+        run: |
+          $binary = (Get-ChildItem dist/native -Recurse -Filter "CartoRigAtomic.ofx" | Select-Object -First 1).FullName
+          if (-not $binary) { throw 'Missing OpenFX native binary artifact' }
+          python tools/package_ofx.py --binary "$binary" --catalog dist/data/cartorig-natural-earth-10m.catalog --manifest dist/data/natural-earth-manifest.json --destination dist
+      - name: Install Inno Setup compiler on CI runner (not on editor computer)
+        shell: pwsh
+        run: |
+          $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup --no-progress -y
+          }
+          if (-not (Test-Path $iscc)) { throw 'Inno Setup compiler unavailable' }
+      - name: Build graphical Windows setup EXE
+        shell: pwsh
+        run: |
+          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' install/CartoRigAtomic.iss
+      - name: Upload one-click installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: CartoRig-Atomic-Windows-Installer
+          path: dist/installer/CartoRig-Atomic-Windows-x64-Setup.exe
+          if-no-files-found: error
+      - name: Upload OFX bundle ZIP for debugging only
+        uses: actions/upload-artifact@v4
+        with:
+          name: CartoRig-Atomic-Windows-OFX-Bundle
+          path: dist/CartoRig-Atomic-OFX-Windows-x64.zip
+          if-no-files-found: error
