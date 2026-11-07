@@ -10,12 +10,20 @@ Only explicit choices by the CartoRig owner are **Approved**. Research, prototyp
 | DEC-004 | Do not reuse earlier CartoRig source code, scripts, assets or internals | **Approved** | Requested greenfield rewrite |
 | DEC-005 | Use Atomic Design to structure UI research and component proposals | **Direction supported; specific system pending review** | Owner proposed it, then requested the new repository |
 | DEC-006 | Reference GEOlayers 3 for geographic UX, VES for Resolve integration learnings | **Reference approved; implementation undecided** | Research and discussion |
-| DEC-007 | Final host UI surface (Inspector, DRFX, Viewer, UIManager or combination) | **Pending** | Requires a real Resolve 20 proof |
+| DEC-007 | **Native sidebar first:** all routine CartoRig authoring (location search, object management, styling and camera controls) must be concentrated in DaVinci Resolve's existing Edit-page Inspector; use the host timeline for animation. No separate CartoRig window in the normal flow. | **Approved product direction; technical feasibility NOT TESTED** | Owner explicitly chose the native lateral panel. Investigate Fusion published controls / OFX capabilities on Resolve Studio 20; do not choose another UI surface without new approval. |
 | DEC-008 | Backend/renderer stack and object-to-node representation | **Pending** | Needs independent per-object keyframe and camera proof |
 | DEC-009 | Geographic data packs and optional sources beyond Natural Earth | **Pending** | Requires license, coverage, storage and UX review |
 | DEC-010 | Product v1 scope and release milestones | **Pending** | Review the end-to-end workflows first |
 | DEC-011 | Specific OSI-approved license for code | **Pending** | No license file until explicitly selected |
 | DEC-012 | Product UI mockups and visual design details | **Pending** | Owner review before implementation |
+
+## DEC-007 — scope of approval
+
+**Approved user experience:** selecting the active CartoRig scene on Edit must expose the normal workflow from the **native sidebar/Inspector**, including geographic search, selecting/adding objects and editing their properties. Camera and object keyframes should use Resolve's native animation facilities; no competing CartoRig timeline. The existing Viewer may display the map and any host-verified interactions, but it must not force users to enter Fusion or open an independent editor for ordinary tasks.
+
+**Not yet demonstrated:** live geographic search results in native Inspector controls; scalable dynamic object lists; independently keyed objects; on-screen picking; Inspector event/parameter support. Do **not** claim implementation, host feasibility or final UI fidelity on the basis of this decision. If any essential capability is unsupported, report the failed experiment and request product-owner review **before** proposing a window or changing the workflow.
+
+**Not approved by DEC-007:** a specific implementation mechanism (Fusion Macro, .DRFX, OpenFX), extra menus, a closed dataset, unapproved controls or any code from the old repository.
 
 ## Template for future decisions
 
