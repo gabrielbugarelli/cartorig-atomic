@@ -44,7 +44,8 @@ public:
     [[nodiscard]] SceneResult addRoute(
         std::string_view fromCityQuery,
         std::string_view toStateQuery,
-        GeoPoint explicitlyChosenDestination);
+        std::optional<GeoPoint> explicitlyChosenDestination,
+        std::string_view chosenDestinationCity = {});
 
     [[nodiscard]] SceneResult selectObject(std::size_t index);
     [[nodiscard]] SceneResult setSelectedStyle(Style style);
