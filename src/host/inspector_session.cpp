@@ -79,9 +79,10 @@ SceneResult InspectorSession::focusCamera(
 SceneResult InspectorSession::addRoute(
     std::string_view originQuery,
     std::string_view destinationQuery,
-    GeoPoint explicitEndpoint) {
-    // A route endpoint must be an exact and unambiguous typed feature match;
-    // "Amapá" is a region, not an implied Macapá default.
+    std::optional<GeoPoint> explicitEndpoint,
+    std::string_view selectedDestinationCity) {
+    // A route endpoint must be an explicitly selected city or confirmed
+    // manual point. State names never imply capital, centroid or 0,0.
     auto originResults = catalog_.search(originQuery, LocationType::City, 20);
     auto destinationResults = catalog_.search(destinationQuery, LocationType::State, 20);
     const auto exact = [](const std::vector<const Feature*>& items, std::string_view name) {
@@ -97,6 +98,21 @@ SceneResult InspectorSession::addRoute(
     const auto* origin = exact(originResults, originQuery);
     const auto* destination = exact(destinationResults, destinationQuery);
     if (!origin || !destination) return {SceneError::MissingFeature, ""};
+
+    if (!selectedDestinationCity.empty()) {
+        auto cityResults = catalog_.search(selectedDestinationCity, LocationType::City, 20);
+        const Feature* point = nullptr;
+        const auto wanted = normalizeSearch(selectedDestinationCity);
+        for (const auto* candidate:cityResults) {
+            if (normalizeSearch(candidate->name) != wanted || !candidate->point ||
+                !contains(*destination, *candidate->point)) continue;
+            if (point) return {SceneError::MissingFeature, ""}; // Ambiguous inside region.
+            point = candidate;
+        }
+        if (!point) return {SceneError::MissingFeature, ""};
+        explicitEndpoint = point->point;
+    }
+    if (!explicitEndpoint) return {SceneError::MissingExplicitEndpoint, ""};
     auto result = scene_.addRoute(catalog_,makeObjectId("route"),
                                   origin->id,destination->id,explicitEndpoint);
     if (result) selectedIndex_=objectCount();
