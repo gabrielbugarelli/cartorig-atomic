@@ -18,6 +18,13 @@ class InspectorLabTests(unittest.TestCase):
         self.assertEqual(result["internal_nodes"], 10)
         self.assertEqual(result["host_resolve20"], "NOT_TESTED")
 
+    def test_drfx_uses_official_edit_generator_bundle_root(self):
+        self.assertEqual(
+            PACKAGE_ENTRY,
+            "Edit/Generators/CartoRig Atomic/CartoRig Atomic - Inspector Lab.setting",
+        )
+        self.assertFalse(PACKAGE_ENTRY.startswith("Fusion/Templates/"))
+
     def test_packaging_is_single_self_contained_generator(self):
         with tempfile.TemporaryDirectory() as tmp:
             package = Path(tmp) / "CartoRig-Atomic-Inspector-Lab.drfx"
