@@ -405,8 +405,14 @@ int main(int argc,char** argv) {
               "camera focuses selected city and not the state");
 
         changed(plugin,e,"addRoute");
+        check(currentText(e,"sceneSnapshot").find("ROUTE")==std::string::npos,
+              "no route is created without an editor-selected endpoint");
+        text(e,"routeOrigin","Brasília");
+        text(e,"routeState","Amapá");
+        text(e,"routeArrivalCity","Macapá");
+        changed(plugin,e,"addRoute");
         check(currentText(e,"sceneSnapshot").find("ROUTE")!=std::string::npos,
-              "explicit route from Brasília to Amapá added and persisted");
+              "explicit route from Brasília to user-selected Macapá in Amapá added");
 
         Properties renderArgs;
         setDouble(asProps(&renderArgs),kOfxPropTime,0,0);
