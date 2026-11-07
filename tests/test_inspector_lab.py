@@ -25,8 +25,16 @@ class InspectorLabTests(unittest.TestCase):
             with ZipFile(package) as archive:
                 self.assertEqual(archive.namelist(), [PACKAGE_ENTRY])
                 self.assertIsNone(archive.testzip())
-                self.assertEqual(archive.read(PACKAGE_ENTRY), SOURCE.read_bytes())
+                self.assertEqual(archive.read(PACKAGE_ENTRY), SOURCE.read_text(encoding="utf-8").encode("utf-8"))
             self.assertEqual(result["host_resolve20"], "NOT_TESTED")
+
+    def test_build_is_reproducible(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            one = Path(tmp) / "one.drfx"
+            two = Path(tmp) / "two.drfx"
+            build(one)
+            build(two)
+            self.assertEqual(one.read_bytes(), two.read_bytes())
 
     def test_dangling_node_is_detected(self):
         source = SOURCE.read_text(encoding="utf-8").replace(
