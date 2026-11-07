@@ -47,6 +47,7 @@ public:
     // UTF-8 tab-delimited CARTORIG_ATOMIC_GEO_V1. See docs/implementation/CATALOG_FORMAT.md.
     static Catalog load(std::istream& stream);
     [[nodiscard]] std::size_t size() const noexcept { return features_.size(); }
+    [[nodiscard]] const std::vector<Feature>& features() const noexcept { return features_; }
 
 private:
     std::vector<Feature> features_;
