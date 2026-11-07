@@ -13,6 +13,7 @@ target_include_directories(cartorig_core PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/host>
 )
 target_compile_features(cartorig_core PUBLIC cxx_std_17)
+set_target_properties(cartorig_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 if(MSVC)
     target_compile_options(cartorig_core PRIVATE /W4 /permissive-)
@@ -36,3 +37,26 @@ enable_testing()
 add_test(NAME cartorig-core-unit COMMAND cartorig_core_tests)
 add_test(NAME cartorig-renderer-unit COMMAND cartorig_renderer_tests)
 add_test(NAME cartorig-inspector-session COMMAND cartorig_inspector_session_tests)
+
+# Optional real OpenFX adapter. The SDK is checked out by CI at a pinned
+# AcademySoftwareFoundation/openfx commit; it is never shipped as a runtime.
+option(CARTORIG_BUILD_OFX "Build native OpenFX host adapter" OFF)
+if(CARTORIG_BUILD_OFX)
+    find_path(OPENFX_INCLUDE_DIR NAMES ofxImageEffect.h
+        HINTS "${CMAKE_CURRENT_SOURCE_DIR}/external/openfx/include"
+        REQUIRED)
+    add_library(CartoRigAtomic SHARED src/ofx/cartorig_ofx.cpp)
+    target_include_directories(CartoRigAtomic PRIVATE "${OPENFX_INCLUDE_DIR}")
+    target_link_libraries(CartoRigAtomic PRIVATE cartorig_core)
+    target_compile_features(CartoRigAtomic PRIVATE cxx_std_17)
+    set_target_properties(CartoRigAtomic PROPERTIES
+        PREFIX "" OUTPUT_NAME "CartoRigAtomic" SUFFIX ".ofx")
+    if(UNIX AND NOT APPLE)
+        target_link_libraries(CartoRigAtomic PRIVATE dl)
+    endif()
+    if(MSVC)
+        target_compile_options(CartoRigAtomic PRIVATE /W4 /permissive-)
+    else()
+        target_compile_options(CartoRigAtomic PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+endif()
