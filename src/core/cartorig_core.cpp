@@ -168,7 +168,6 @@ std::string normalizeSearch(std::string_view input) {
     for (std::size_t i = 0; i < input.size();) {
         const unsigned char first = static_cast<unsigned char>(input[i]);
         if (first < 128) {
-            const char c = static_cast<char>(first);
             if (allAsciiSpaceOrDelimiter(first)) {
                 if (!previousSpace) folded += ' ';
                 previousSpace = true;
@@ -241,11 +240,16 @@ std::vector<const Feature*> Catalog::search(
 Catalog Catalog::load(std::istream& stream) {
     Catalog catalog;
     std::string line;
-    if (!std::getline(stream, line) || line != "CARTORIG_ATOMIC_GEO_V1") {
+    if (!std::getline(stream, line)) {
+        throw std::invalid_argument("missing offline catalog header");
+    }
+    if (!line.empty() && line.back() == '\r') line.pop_back();
+    if (line != "CARTORIG_ATOMIC_GEO_V1") {
         throw std::invalid_argument("unsupported/offline catalog format");
     }
     std::size_t lineNumber = 1;
     while (std::getline(stream, line)) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
         ++lineNumber;
         if (line.empty() || line.front() == '#') continue;
         const auto fields = split(line, '\t');
