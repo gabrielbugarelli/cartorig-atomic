@@ -130,6 +130,7 @@ public:
         std::string destinationRegionId,
         std::optional<GeoPoint> explicitEndpoint);
     [[nodiscard]] SceneResult setRouteStyle(std::string_view objectId, Style style);
+    [[nodiscard]] SceneResult setRouteReveal(std::string_view objectId, double progress);
 
     [[nodiscard]] const CameraPose& camera() const noexcept { return camera_; }
     [[nodiscard]] const std::vector<Region>& regions() const noexcept { return regions_; }
