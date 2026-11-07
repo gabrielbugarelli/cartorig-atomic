@@ -1,0 +1,43 @@
+name: Inspector Lab - static and packaging checks
+
+on:
+  push:
+    branches:
+      - spike/native-inspector-fusion-generator
+    paths:
+      - 'experiments/inspector-lab/**'
+      - 'tools/build_inspector_lab.py'
+      - 'tests/test_inspector_lab.py'
+      - '.github/workflows/inspector-lab.yml'
+  pull_request:
+    paths:
+      - 'experiments/inspector-lab/**'
+      - 'tools/build_inspector_lab.py'
+      - 'tests/test_inspector_lab.py'
+      - '.github/workflows/inspector-lab.yml'
+  workflow_dispatch:
+
+jobs:
+  static-validation:
+    name: Static structure / no host (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate independent Inspector controls
+        run: python -m unittest discover -s tests -v
+      - name: Build self-contained DRFX diagnostic
+        run: python tools/build_inspector_lab.py
+      - name: Upload installable lab file (Windows build)
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: CartoRig-Atomic-Inspector-Lab
+          path: dist/CartoRig-Atomic-Inspector-Lab.drfx
+          if-no-files-found: error
