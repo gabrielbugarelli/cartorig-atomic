@@ -30,6 +30,9 @@ target_link_libraries(cartorig_renderer_tests PRIVATE cartorig_core)
 add_executable(cartorig_inspector_session_tests tests/inspector_session_tests.cpp)
 target_link_libraries(cartorig_inspector_session_tests PRIVATE cartorig_core)
 
+add_executable(cartorig_real_scenario_probe tools/real_scenario_probe.cpp)
+target_link_libraries(cartorig_real_scenario_probe PRIVATE cartorig_core)
+
 add_executable(cartorig_catalog_probe tools/catalog_probe.cpp)
 target_link_libraries(cartorig_catalog_probe PRIVATE cartorig_core)
 
