@@ -200,6 +200,46 @@ void testTopology() {
     check(contains(withHole,{4,0}), "boundary allowed as selected endpoint");
 }
 
+void testSceneSnapshotRoundtrip() {
+    const auto catalog=populatedCatalog();
+    MapScene scene;
+    check(static_cast<bool>(scene.focusCamera(catalog,"ne:city:sp")),"focus before save");
+    check(static_cast<bool>(scene.addRegion(catalog,"rj_obj","ne:state:rj")),
+          "persist state region");
+    check(static_cast<bool>(scene.addRegion(catalog,"br_obj","ne:country:br")),
+          "persist country region");
+    Style rj;
+    rj.fill={0.13,0.29,0.88,0.71};
+    rj.opacity=0.73;
+    check(static_cast<bool>(scene.setRegionStyle("rj_obj",rj)),
+          "persist independent region style");
+    check(static_cast<bool>(scene.addRoute(catalog,"route","ne:city:bsb",
+                                          "ne:state:ap",GeoPoint{-51.6,1.3})),
+          "persist explicitly chosen arrival");
+    check(static_cast<bool>(scene.setRouteReveal("route",0.42)),
+          "persist Route reveal");
+    const std::string snapshot=encodeScene(scene);
+    check(snapshot.find("CARTORIG_ATOMIC_SCENE_V1")==0,"versioned snapshot");
+    const auto loaded=decodeScene(snapshot,catalog);
+    check(loaded.regions().size()==2 && loaded.routes().size()==1,
+          "roundtrip objects preserved");
+    check(loaded.regions()[0].style.fill.blue==0.88,
+          "roundtrip custom region color preserved");
+    check(loaded.regions()[0].style.opacity==0.73,
+          "roundtrip region opacity preserved");
+    check(loaded.regions()[1].style.fill.blue!=0.88,
+          "other region unaffected by custom style");
+    check(std::abs(loaded.routes()[0].to.latitude-1.3)<1e-10,
+          "roundtrip explicit geographic endpoint");
+    check(loaded.routes()[0].reveal==0.42,"roundtrip route reveal");
+    check(loaded.camera().center.longitude==scene.camera().center.longitude,
+          "camera coordinate persists precisely");
+    bool rejected=false;
+    try {auto invalid=decodeScene("WRONG_SCENE_FORMAT\n",catalog);(void)invalid;}
+    catch(const std::invalid_argument&) {rejected=true;}
+    check(rejected,"unknown scene format rejected, no silent conversion");
+}
+
 void testCatalogFileFormat() {
     std::stringstream in;
     in << "CARTORIG_ATOMIC_GEO_V1\n";
@@ -227,6 +267,7 @@ int main() {
         testExplicitStateEndpointRoute();
         testTopology();
         testCatalogFileFormat();
+        testSceneSnapshotRoundtrip();
         std::cout<<"PASS: "<<checks<<" cartographic assertions (offline C++ core)\n";
         return 0;
     } catch(const std::exception& e) {
