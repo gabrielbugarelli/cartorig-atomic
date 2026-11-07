@@ -23,24 +23,32 @@ These are logical modules, not a prescribed code-language, library stack or dire
 
 **None of the previous code, graphs or scripts will be copied.** These facts do not validate new dynamic UI controls or per-object animation.
 
-## Candidate host integration (decision pending)
+## Product constraint — native Inspector first (DEC-007)
+
+**The owner approved the direction, not the feasibility:** the normal authoring workflow must be offered through DaVinci Resolve Studio 20's existing Edit sidebar/Inspector. This includes *search by natural place name*, *country/state/city disambiguation*, *object addition/selection*, *shared styling*, and *camera controls*. Animation must remain in host-native facilities (Edit keyframes/curves), not a second CartoRig editor. The Viewer can be used for preview and any host-validated gestures.
+
+**Out of scope unless separately approved:** a floating CartoRig editor, a separate Workflow Integration window for routine authoring, manually assembling Fusion nodes, or scripts spread across Workspace menus.
+
+This is a **hard UX acceptance gate**, not evidence that a published Fusion Macro or an OFX parameter hierarchy can implement arbitrary search results or object management. The first technical experiment must test these behaviors without introducing an unrelated renderer or a restricted hard-coded country list.
+
+## Host integration mechanisms for the approved native-Inspector direction (technical decision pending)
 
 | Candidate | Why investigate | Host proof needed |
 | --- | --- | --- |
 | Fusion Title/Generator `.DRFX` facade | VES sample demonstrates native Effects Library packaging and published Inspector controls | Hosting a newly written cartographic engine, Edit preview, project save and Deliver |
 | Fusion Composition + custom OpenFX | Prior CartoRig integration worked on one host | Authoring multiple objects without manual node management |
 | OpenFX Generator/Filter | Native image-render lifecycle | Dynamic object UI, overlay events and native independent curves |
-| Fusion UIManager/Viewer interactions | Location browser, custom UI, path selection | Focus, lifetime, docking limits, Undo, event delivery |
+| Fusion UIManager/Viewer interactions | Viewer gestures may complement the Inspector if verified | A UIManager **separate window** is not an acceptable default for regular authoring under DEC-007; any departure needs new owner approval |
 
-No candidate is the approved product architecture merely by being plausible.
+**Native Inspector is the approved UX direction; no specific integration mechanism is approved.** A candidate that requires a separate routine authoring window fails the current product constraint until the owner changes it.
 
 ## Highest-priority integration gates
 
 | Gate | What must be verified on the actual Resolve 20 host |
 | --- | --- |
 | HOST-01 | One entry point creates/selects a Map Scene in Edit |
-| HOST-02 | Search and disambiguate country/state/city by readable names |
-| HOST-03 | Select and style two objects independently without fragmented controls |
+| HOST-02 | **Inside the native Edit Inspector**, search and disambiguate country/state/city by readable names; do not assume Fusion macros support dynamic results |
+| HOST-03 | **Inside the native Edit Inspector**, select and style two objects independently without fragmented controls |
 | HOST-04 | Independently animate two objects and a shared geographic camera |
 | HOST-05 | Camera movement causes **no object/route drift** on intermediate frames |
 | HOST-06 | Use normal Resolve keyframes/curves with correct persistence |
