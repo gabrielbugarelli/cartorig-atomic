@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 import re
 import sys
-from zipfile import ZIP_DEFLATED, ZipFile
+from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 ROOT = Path(__file__).resolve().parents[1]
 NAME = "CartoRig Atomic - Inspector Lab.setting"
@@ -98,8 +98,11 @@ def build(destination: Path) -> dict[str, object]:
     content = SOURCE.read_text(encoding="utf-8")
     report = inspect_source(content)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    with ZipFile(destination, "w", compression=ZIP_DEFLATED, compresslevel=9) as archive:
-        archive.writestr(PACKAGE_ENTRY, content.encode("utf-8"))
+    entry = ZipInfo(PACKAGE_ENTRY, date_time=(2020, 1, 1, 0, 0, 0))
+    entry.compress_type = ZIP_DEFLATED
+    entry.external_attr = 0o644 << 16
+    with ZipFile(destination, "w") as archive:
+        archive.writestr(entry, content.encode("utf-8"), compress_type=ZIP_DEFLATED, compresslevel=9)
     with ZipFile(destination) as archive:
         if archive.namelist() != [PACKAGE_ENTRY] or archive.testzip() is not None:
             raise ValueError("Invalid or unexpected DRFX archive layout")
