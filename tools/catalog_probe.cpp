@@ -70,12 +70,13 @@ int main(int argc, char** argv) {
                 has(catalog,"São Paulo",cartorig::LocationType::State,true) &&
                 has(catalog,"São Paulo",cartorig::LocationType::City) &&
                 has(catalog,"Brasilia",cartorig::LocationType::City) &&
+                has(catalog,"Macapa",cartorig::LocationType::City) &&
                 has(catalog,"Amapa",cartorig::LocationType::State,true);
             if (!valid) {
                 std::cerr << "FAIL: required country/state/city source coverage is missing\n";
                 return 2;
             }
-            std::cout << "PASS: natural-name Rio/SP/Brasília/Amapa coverage smoke\n";
+            std::cout << "PASS: natural-name Rio/SP/Brasília/Macapá/Amapá coverage smoke\n";
         }
         return 0;
     } catch (const std::exception& e) {

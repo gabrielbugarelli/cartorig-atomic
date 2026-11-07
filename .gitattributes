@@ -1,0 +1,10 @@
+*.cpp text eol=lf
+*.hpp text eol=lf
+*.py text eol=lf
+*.yml text eol=lf
+*.md text eol=lf
+*.catalog text eol=lf
+*.json text eol=lf
+*.iss text eol=crlf
+*.ofx binary
+*.exe binary

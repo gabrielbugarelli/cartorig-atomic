@@ -1,0 +1,9 @@
+CARTORIG_ATOMIC_GEO_V1
+ne:fixture:country:BR	country	Brazil		Brazil	Brasil	.	.	-74,-34;-34,-34;-34,5;-74,5;-74,-34
+ne:fixture:state:RJ	state	Rio de Janeiro	Brazil	Brazil		.	.	-45,-24;-40,-24;-40,-20;-45,-20;-45,-24
+ne:fixture:city:Rio	city	Rio de Janeiro	Rio de Janeiro	Brazil		-43.2	-22.9	
+ne:fixture:state:SP	state	São Paulo	Brazil	Brazil	Sao Paulo	.	.	-54,-26;-44,-26;-44,-20;-54,-20;-54,-26
+ne:fixture:city:SP	city	São Paulo	São Paulo	Brazil	Sao Paulo	-46.6	-23.5	
+ne:fixture:state:AP	state	Amapá	Brazil	Brazil	Amapa	.	.	-53,0;-50,0;-50,4;-53,4;-53,0
+ne:fixture:city:Brasilia	city	Brasília	Distrito Federal	Brazil	Brasilia	-47.8825	-15.7942	
+ne:fixture:city:Macapa	city	Macapá	Amapá	Brazil	Macapa	-51.05	0.1	
