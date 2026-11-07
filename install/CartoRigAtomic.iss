@@ -17,8 +17,8 @@ DisableDirPage=yes
 DisableProgramGroupPage=yes
 UsePreviousAppDir=no
 PrivilegesRequired=admin
-ArchitecturesAllowed=x64compatible
-ArchitecturesInstallIn64BitMode=x64compatible
+ArchitecturesAllowed=x64
+ArchitecturesInstallIn64BitMode=x64
 Compression=lzma2
 SolidCompression=yes
 OutputDir=..\dist\installer
@@ -33,9 +33,9 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"
 
 [Files]
-Source: "..\dist\ofx\Contents\Win64\CartoRigAtomic.ofx"; DestDir: "{app}\Contents\Win64"; Flags: ignoreversion
-Source: "..\dist\ofx\Contents\Resources\cartorig-natural-earth-10m.catalog"; DestDir: "{app}\Contents\Resources"; Flags: ignoreversion
-Source: "..\dist\ofx\Contents\Resources\natural-earth-manifest.json"; DestDir: "{app}\Contents\Resources"; Flags: ignoreversion
+Source: "..\dist\CartoRigAtomic.ofx.bundle\Contents\Win64\CartoRigAtomic.ofx"; DestDir: "{app}\Contents\Win64"; Flags: ignoreversion
+Source: "..\dist\CartoRigAtomic.ofx.bundle\Contents\Resources\cartorig-natural-earth-10m.catalog"; DestDir: "{app}\Contents\Resources"; Flags: ignoreversion
+Source: "..\dist\CartoRigAtomic.ofx.bundle\Contents\Resources\natural-earth-manifest.json"; DestDir: "{app}\Contents\Resources"; Flags: ignoreversion
 Source: "..\docs\implementation\NATIVE_CORE_V01.md"; DestDir: "{app}\Contents\Resources\Documentation"; Flags: ignoreversion
 
 [Code]
