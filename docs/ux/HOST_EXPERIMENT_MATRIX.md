@@ -4,7 +4,9 @@
 
 ## Purpose
 
-Compare candidate delivery surfaces **against the same approved interaction requirements** before choosing an engine, toolchain or menu system. The goal is a single coherent map-authoring experience on Edit with native timeline and Deliver, not implementation parity with After Effects.
+**Owner decision DEC-007:** native **Edit-page Inspector/sidebar** is the mandatory target for everyday authoring. The objective is to **prove or falsify** that the Inspector can accommodate natural-name search, typed geographic results, adding/selecting arbitrary authored objects, consistent style and native keyframes. A separate window may be documented as a contingency but is **not an authorized fallback**.
+
+Compare native-Inspector-compatible mechanisms against the same product acceptance tests before choosing an engine, toolchain or menu system. Do not interpret this as a request to reproduce the After Effects extension.
 
 ## Candidate approaches (all undecided)
 
@@ -13,8 +15,8 @@ Compare candidate delivery surfaces **against the same approved interaction requ
 | C-A | Fusion Title / Generator template distributed as `.drfx` | Native Effects Library insertion and published Inspector controls, demonstrated by VES sample | Dynamic search/list editing, independent objects and camera controls without opening Fusion |
 | C-B | Fusion Composition + native custom OpenFX inside | Known feasible container in earlier CartoRig proof | Unified authoring UX and scalable independent object animation |
 | C-C | OpenFX effect with supported overlay/interacts | Native render pipeline and some on-image controls | Availability of pen/drag/picking events in Resolve 20 Edit/Fusion, dynamic values |
-| C-D | Fusion UIManager-based editor | List/search/custom widgets may be more flexible | Window and focus management, Edit selection, persistence and Undo |
-| C-E | Hybrid of published Inspector controls + one complementary editor | Could combine native keyframes and object discovery | Synchronization and risk of two contradictory states |
+| C-D | Fusion UIManager-based editor | Contingency **outside the approved normal UX**, not the active path | Would normally require an additional window; needs fresh owner authorization if native-panel approach proves impossible |
+| C-E | Hybrid of published Inspector controls + one complementary editor | Contingency **not approved for implementation** | Conflicts with no-separate-window target; do not select silently |
 
 **Do not choose C-A just because the VES sample installed cleanly. Do not choose C-B just because the old proof rendered.**
 
@@ -46,8 +48,8 @@ A CI-only test is labeled **SIMULATED**, never PASS on the real host.
 | ID | Concrete action | Pass criterion | Decision affected |
 | --- | --- | --- | --- |
 | EX-01 | Insert a Map Scene using a single visible CartoRig entry point from Edit | Correct active timeline/clip and live Viewer output; no manual node assembly | Entry surface |
-| EX-02 | Search Rio de Janeiro and disambiguate State vs City | Natural-name search, type and parent are visible; no ISO3 entry required | Search UI |
-| EX-03 | Add RJ State Region, then change only its Fill | Independent target and color controls; no global RGB workaround | Scene object binding |
+| EX-02 | **From the native Edit Inspector**, search Rio de Janeiro and distinguish State vs City | Natural-name search, type and parent visible without a separate window; no ISO3 input | Search UI |
+| EX-03 | **From the native Edit Inspector**, add RJ State Region, then change only its Fill | Selection/add/edit in-panel; independent target and color controls; no global RGB workaround | Scene object binding |
 | EX-04 | Add Brazil Country as second Region; change Base Map color | Country/state/base have independent overrides and shared color semantics | Atomic style controls |
 | EX-05 | Add two distinct keyframes of opacity to RJ, a different curve to Brazil | Both editable in genuine Resolve host keyframes; no shared animated slot | Animation adapter |
 | EX-06 | Animate shared camera toward São Paulo City across at least three sample frames | No drifting of any region, marker, route or label | Camera binding |
@@ -84,10 +86,10 @@ Record usability problems (number of unnecessary panels/dialogs, context switchi
 
 ## Open owner decisions
 
-1. Does a separate in-process window count as acceptable Edit-first authoring, or must all normal editing stay in native Inspector/Viewer?
+1. **Resolved in DEC-007:** everyday authoring must stay in the native Edit Inspector/sidebar; a separate window is not acceptable without new explicit approval. **Technical feasibility remains NOT TESTED.**
 2. Is on-map picking required for the first release, or can a reviewed search/list alternative pass?
 3. Which animation behavior is required if the Resolve Inspector cannot expose a keyframe control for newly added objects?
-4. Can the UI show one dedicated contextual editor plus a small set of published Inspector properties, or must there be exactly one surface?
+4. **Resolved as product direction:** the primary authoring surface is the native Inspector. Precisely how to expose the dynamic object model within its limits remains unverified; if impossible, return the evidence and request a decision.
 
 No answers are presumed in this document.
 
