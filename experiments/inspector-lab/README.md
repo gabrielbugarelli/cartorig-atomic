@@ -1,6 +1,6 @@
 # Inspector Lab — native Resolve Edit Inspector research spike
 
-**Status (2026-11-07): STATIC CHECKS PASS / RESOLVE STUDIO 20 HOST NOT TESTED.**
+**Status (2026-11-07): corrected bundle layout; CI verification pending on this commit / RESOLVE STUDIO 20 HOST NOT TESTED.**
 
 This is the **first clean-room executable experiment** for [DEC-007](../../docs/DECISIONS.md): ordinary CartoRig authoring must be concentrated in the **native Inspector sidebar** on the **Edit** page, without a separate CartoRig window.
 
@@ -17,13 +17,21 @@ Two simple colored rectangles represent **Region A and Region B**. They are **no
 
 **Critical limitation:** `InstanceInput` exposes an existing node's static parameter. This experiment does **not** implement dynamic `Find Location`, country/state/city search results, arbitrary object selection, object creation, independent host keyframe certification, a route editor, Natural Earth, or a complete Atomic Design UI.
 
+## DRFX packaging correction
+
+**Important — the first Inspector Lab artifact had the wrong ZIP root** (`Fusion/Templates/Edit/Generators/...`). The official Fusion 20.3 manual, chapter 6, page 184, requires a `.drfx` archive whose root is **`Edit/Generators/...`**. The release packager and tests have been corrected. **The previous download must not be used to evaluate whether the generator is discoverable.** Source: [Blackmagic Fusion 20.3 reference manual](https://documents.blackmagicdesign.com/UserManuals/FusionManual.pdf), "Using Fusion Template Bundles".
+
+If the earlier package was installed, avoid keeping two versions simultaneously. Reinstall using the corrected artifact; if there is an old conflicting bundle, remove that bundle using the Fusion template manager/folder. Do not remove unrelated templates.
+
+**Troubleshooting:** If the corrected package is confirmed installed and not found by Effects Library search, record that as `IL-01 FAIL` along with the install dialog and Resolve version; don't infer success from the archive passing CI.
+
 ## Install: single file, no terminal
 
 1. Close DaVinci Resolve Studio 20.
-2. [Download the compiled-by-packager `.drfx` asset](../../dist/) from a successful GitHub Actions build (artifact named `CartoRig-Atomic-Inspector-Lab`). Alternatively, use the attached experimental `.drfx` shared alongside this PR.
+2. Download the **corrected** `.drfx` from the latest successful GitHub Actions run of this branch, artifact `CartoRig-Atomic-Inspector-Lab` (or the corrected attachment provided in the conversation). **Do not use the first package from this PR.**
 3. **Double-click the `.drfx`**. Accept the DaVinci Resolve installation confirmation, if offered.
 4. Launch/relaunch Resolve and open a **new, disposable test project**.
-5. Edit → Effects Library → **Generators** → **Fusion Generators**: locate `CartoRig Atomic - Inspector Lab` (folder/category presentation may differ).
+5. In the **Edit** page, open **Effects / Effects Library**. Under **Toolbox**, select **Generators**; use the Effects search field to find `CartoRig Atomic - Inspector Lab`. **`Fusion Generators` is a label/group in Blackmagic's manual, not a mandatory submenu in every Resolve 20 layout or language.**
 6. Drag the generator onto an empty test timeline, select its clip and open the **Inspector**.
 
 **Do not install any previous CartoRig plugin or VES asset for this experiment.** The archive contains exactly one new `.setting`; it does not overwrite an old CartoRig OpenFX binary.
