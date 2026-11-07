@@ -250,7 +250,8 @@ void testCatalogFileFormat() {
     check(catalog.size()==2,"parse two catalog features");
     check(contains(*catalog.find("ne:test:1"),{-43,-22}),"parse real polygon");
     check(catalog.search("rio de janeiro").size()==2,"typed ambiguity preserved on disk");
-    std::stringstream windows("CARTORIG_ATOMIC_GEO_V1\r\n");
+    std::stringstream windows;
+    windows << "CARTORIG_ATOMIC_GEO_V1\r\n";
     windows << "ne:windows:1\tcity\tMacapá\tAmapá\tBrazil\tMacapa\t-51.05\t0.1\t\r\n";
     const auto windowsCatalog=Catalog::load(windows);
     check(windowsCatalog.search("Macapa", LocationType::City).size()==1,
