@@ -83,6 +83,12 @@ jobs:
         run: |
           python -m pip install -r tools/requirements-build.txt
           python tools/build_natural_earth.py --output dist/data/cartorig-natural-earth-10m.catalog
+      - name: Compile real geographic acceptance probe
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release --parallel
+      - name: Verify Rio/SP/Brasília/Macapá in actual geographic data
+        run: ./build/cartorig_real_scenario_probe dist/data/cartorig-natural-earth-10m.catalog
       - name: Upload catalog and SHA256 source manifest
         uses: actions/upload-artifact@v4
         with:
