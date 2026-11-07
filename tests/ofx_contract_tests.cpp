@@ -426,6 +426,20 @@ int main(int argc,char** argv) {
         }
         check(opaque && nonUniform,"render actually draws more than one color");
 
+
+        // A project restore/plugin-initiated callback for an action button
+        // is not a real user click and must NOT create a duplicate region.
+        {
+            const std::string before=currentText(e,"sceneSnapshot");
+            Properties notUser;
+            setString(asProps(&notUser),kOfxPropName,0,"addRegion");
+            setString(asProps(&notUser),kOfxPropChangeReason,0,kOfxChangePluginEdited);
+            check(plugin->mainEntry(kOfxActionInstanceChanged,effectHandle(&e),
+                                    asProps(&notUser),nullptr)==kOfxStatOK,
+                  "non-user action callback safely ignored");
+            check(currentText(e,"sceneSnapshot")==before,
+                  "restoring saved projects cannot accidentally add objects");
+        }
         const std::string persisted=currentText(e,"sceneSnapshot");
         check(plugin->mainEntry(kOfxActionDestroyInstance,effectHandle(&e),nullptr,nullptr)==kOfxStatOK,
               "host can destroy original plugin instance");
