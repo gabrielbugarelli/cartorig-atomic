@@ -434,13 +434,14 @@ void defineColor(OfxParamSetHandle set,const char* name,const char* label,
     for(int i=0;i<4;++i) property->propSetDouble(p,kOfxParamPropDefault,i,values[i]);
 }
 
-void defineText(OfxParamSetHandle set,const char* name,const char* label,
+OfxPropertySetHandle defineText(OfxParamSetHandle set,const char* name,const char* label,
                 const char* initial,bool editable=true,bool multiLine=false) {
     auto p=defineParam(set,kOfxParamTypeString,name,label);
     property->propSetString(p,kOfxParamPropDefault,0,initial);
     property->propSetString(p,kOfxParamPropStringMode,0,
                            multiLine?kOfxParamStringIsMultiLine:kOfxParamStringIsSingleLine);
     if(!editable) property->propSetInt(p,kOfxParamPropEnabled,0,0);
+    return p;
 }
 
 void definePage(OfxParamSetHandle set,const char* name,
@@ -546,13 +547,8 @@ OfxStatus describeContext(OfxImageEffectHandle effect,OfxPropertySetHandle args)
     }
     defineParam(set,kOfxParamTypePushButton,kAddRoute,"Add Route");
     defineText(set,kStatus,"Status","Ready — loading offline data",false,true);
-    defineText(set,kScene,"Internal Scene Snapshot","",true,true);
     {
-        OfxParamHandle handle=nullptr;
-        OfxPropertySetHandle p=nullptr;
-        verify(parameters->paramGetHandle(set,kScene,&handle,&p),"snapshot parameter properties");
-        // Some hosts only provide the descriptor properties via paramDefine,
-        // not paramGetHandle. If this fails, do not hide the failure.
+        auto p=defineText(set,kScene,"Internal Scene Snapshot","",true,true);
         property->propSetInt(p,kOfxParamPropSecret,0,1);
     }
     definePage(set,"Find",{kSearch,kType,kMatch,kSearchResults,kAddRegion,kFocus});
