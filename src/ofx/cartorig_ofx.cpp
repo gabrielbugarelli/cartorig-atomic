@@ -63,6 +63,8 @@ constexpr const char* kCamera = "cameraCenter";
 constexpr const char* kZoom = "cameraZoom";
 constexpr const char* kOrigin = "routeOrigin";
 constexpr const char* kDestination = "routeState";
+constexpr const char* kArrivalCity = "routeArrivalCity";
+constexpr const char* kManualEndpoint = "routeManualEndpoint";
 constexpr const char* kEndpoint = "routeEndpoint";
 constexpr const char* kAddRoute = "addRoute";
 constexpr const char* kOcean = "oceanFill";
@@ -394,10 +396,16 @@ OfxStatus onInstanceChanged(OfxImageEffectHandle effect,OfxPropertySetHandle arg
         return kOfxStatOK;
     }
     if(key==kAddRoute) {
-        const auto p=positionValue(effect,kEndpoint,0.0,false);
+        std::optional<GeoPoint> point;
+        if(intValue(effect,kManualEndpoint)!=0) {
+            const auto p=positionValue(effect,kEndpoint,0.0,false);
+            point=GeoPoint{p[0],p[1]};
+        }
         const auto result=session.addRoute(
             stringValue(effect,kOrigin),
-            stringValue(effect,kDestination), {p[0],p[1]});
+            stringValue(effect,kDestination),
+            point,
+            stringValue(effect,kArrivalCity));
         if(!result){setStatus(effect,errorText(result.error));return kOfxStatOK;}
         commitSession(effect,*state,session,"Route added with explicit destination.");
         return kOfxStatOK;
@@ -555,13 +563,19 @@ OfxStatus describeContext(OfxImageEffectHandle effect,OfxPropertySetHandle args)
     }
     defineColor(set,kOcean,"Ocean Fill",{0.055,0.115,0.165,1});
     defineColor(set,kLand,"Land Fill",{0.35,0.44,0.39,1});
-    defineText(set,kOrigin,"Route From City","Brasília");
-    defineText(set,kDestination,"Route To State","Amapá");
+    defineText(set,kOrigin,"Route From City","");
+    defineText(set,kDestination,"Route To State","");
+    defineText(set,kArrivalCity,"Arrival City (choose by name)","");
+    {
+        auto p=defineParam(set,kOfxParamTypeBoolean,kManualEndpoint,
+                           "Use Manual Coordinates Instead");
+        property->propSetInt(p,kOfxParamPropDefault,0,0);
+    }
     {
         auto p=defineParam(set,kOfxParamTypeDouble2D,kEndpoint,
-                           "Explicit Endpoint (Longitude / Latitude)");
-        property->propSetDouble(p,kOfxParamPropDefault,0,-51.6);
-        property->propSetDouble(p,kOfxParamPropDefault,1,1.3);
+                           "Manual Endpoint (Longitude / Latitude)");
+        property->propSetDouble(p,kOfxParamPropDefault,0,0);
+        property->propSetDouble(p,kOfxParamPropDefault,1,0);
     }
     defineParam(set,kOfxParamTypePushButton,kAddRoute,"Add Route");
     defineText(set,kStatus,"Status","Ready — loading offline data",false,true);
@@ -572,7 +586,7 @@ OfxStatus describeContext(OfxImageEffectHandle effect,OfxPropertySetHandle args)
     definePage(set,"Find",{kSearch,kType,kMatch,kSearchResults,kAddRegion,kFocus});
     definePage(set,"Objects",{kList,kSelect,kSelectedInfo,kFill,kStroke,kOpacity,kWidth,kVisible});
     definePage(set,"Camera",{kCamera,kZoom,kOcean,kLand});
-    definePage(set,"Route",{kOrigin,kDestination,kEndpoint,kAddRoute});
+    definePage(set,"Route",{kOrigin,kDestination,kArrivalCity,kManualEndpoint,kEndpoint,kAddRoute});
     definePage(set,"Info",{kStatus});
 
     return kOfxStatOK;
