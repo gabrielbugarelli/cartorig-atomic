@@ -36,6 +36,11 @@ Catalog catalog() {
     ap.id="ap-state";ap.name="Amapá";ap.country="Brazil";
     ap.type=LocationType::State;ap.polygons={rectangle(-53,0,-50,4)};
     c.add(ap);
+    Feature macapa;
+    macapa.id="macapa-city";macapa.name="Macapá";macapa.country="Brazil";
+    macapa.parent="Amapá";macapa.type=LocationType::City;
+    macapa.point=GeoPoint{-51.05,0.1};
+    c.add(macapa);
     Feature bsb;
     bsb.id="bsb-city";bsb.name="Brasília";bsb.country="Brazil";
     bsb.type=LocationType::City;bsb.point=GeoPoint{-47.8825,-15.7942};
@@ -64,6 +69,18 @@ int main() {
                SceneError::WrongGeometryType,"State not silently given a city center");
         expect(static_cast<bool>(session.focusCamera("São Paulo",LocationType::City,0)),
                "city camera focuses precise point");
+        expect(session.addRoute("Brasília","Amapá",std::nullopt).error==
+               SceneError::MissingExplicitEndpoint,
+               "region alone cannot imply Macapá or a default coordinate");
+        InspectorSession chosenCity(places);
+        expect(static_cast<bool>(chosenCity.addRoute(
+                "Brasília","Amapá",std::nullopt,"Macapá")),
+               "user may explicitly choose Macapá by city name");
+        expect(chosenCity.scene().routes()[0].to.latitude==0.1,
+               "city endpoint must equal catalog coordinate and be inside Amapá");
+        expect(chosenCity.addRoute("Brasília","Amapá",std::nullopt,"São Paulo").error==
+               SceneError::MissingFeature,
+               "chosen city outside state cannot be silently accepted");
         expect(session.addRoute("Brasília","Amapá",GeoPoint{-46.6,-23.5}).error==
                SceneError::EndpointOutsideRegion,"state endpoint must be chosen inside it");
         expect(static_cast<bool>(session.addRoute("Brasília","Amapá",GeoPoint{-51.6,1.3})),
