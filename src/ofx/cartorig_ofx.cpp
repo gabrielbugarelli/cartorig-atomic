@@ -196,6 +196,13 @@ void setString(OfxImageEffectHandle effect, const char* name, const std::string&
     verify(parameters->paramSetValue(param(effect,name),value.c_str()),"write Inspector text");
 }
 
+void setInformationalText(OfxImageEffectHandle effect, const char* name,
+                          const std::string& value) {
+    // A few OFX hosts reject paramSetValue on disabled/read-only controls.
+    // This is optional visual feedback, not the canonical scene store.
+    try { setString(effect,name,value); } catch (...) {}
+}
+
 void setInt(OfxImageEffectHandle effect, const char* name, int value) {
     verify(parameters->paramSetValue(param(effect,name),value),"write Inspector index");
 }
@@ -272,13 +279,13 @@ std::string errorText(SceneError e) {
 }
 
 void refreshResults(OfxImageEffectHandle effect,InspectorSession& session) {
-    setString(effect,kSearchResults,searchDescription(
+    setInformationalText(effect,kSearchResults,searchDescription(
         session,stringValue(effect,kSearch),selectedType(effect)));
 }
 
 void refreshSelection(OfxImageEffectHandle effect,InspectorSession& session) {
-    setString(effect,kList,session.objectsSummary());
-    setString(effect,kSelectedInfo,session.selectedDescription());
+    setInformationalText(effect,kList,session.objectsSummary());
+    setInformationalText(effect,kSelectedInfo,session.selectedDescription());
     if (auto style=session.selectedStyle()) {
         setColor(effect,kFill,style->fill);
         setColor(effect,kStroke,style->stroke);
@@ -331,6 +338,14 @@ OfxStatus onInstanceChanged(OfxImageEffectHandle effect,OfxPropertySetHandle arg
         return kOfxStatReplyDefault;
 
     const std::string key=name;
+    // A host may reissue instance-change callbacks while restoring a saved
+    // project. Destructive buttons must only respond to an actual user edit.
+    char* reason=nullptr;
+    const bool userEdit=ok(property->propGetString(
+        args,kOfxPropChangeReason,0,&reason)) &&
+        reason && std::strcmp(reason,kOfxChangeUserEdited)==0;
+    if ((key==kAddRegion || key==kFocus || key==kAddRoute) && !userEdit)
+        return kOfxStatOK;
     if (key==kScene || key==kStatus || key==kSearchResults ||
         key==kList || key==kSelectedInfo) return kOfxStatOK;
 
