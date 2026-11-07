@@ -16,7 +16,7 @@ from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 ROOT = Path(__file__).resolve().parents[1]
 NAME = "CartoRig Atomic - Inspector Lab.setting"
 SOURCE = ROOT / "experiments" / "inspector-lab" / NAME
-PACKAGE_ENTRY = f"Fusion/Templates/Edit/Generators/CartoRig Atomic/{NAME}"
+PACKAGE_ENTRY = f"Edit/Generators/CartoRig Atomic/{NAME}"
 
 
 def _balanced_lua_table(source: str) -> None:
@@ -98,6 +98,9 @@ def build(destination: Path) -> dict[str, object]:
     content = SOURCE.read_text(encoding="utf-8")
     report = inspect_source(content)
     destination.parent.mkdir(parents=True, exist_ok=True)
+    # DRFX archives start at Edit/, not Fusion/Templates/; see Fusion 20.3 manual, p. 184.
+    if not PACKAGE_ENTRY.startswith("Edit/Generators/") or PACKAGE_ENTRY.startswith("Fusion/"):
+        raise ValueError("Invalid DRFX root; expected Edit/Generators/")
     entry = ZipInfo(PACKAGE_ENTRY, date_time=(2020, 1, 1, 0, 0, 0))
     entry.compress_type = ZIP_DEFLATED
     entry.external_attr = 0o644 << 16
