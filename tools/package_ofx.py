@@ -17,8 +17,12 @@ def package(binary: Path, catalog: Path, manifest: Path, destination: Path) -> d
         raise ValueError("unsupported offline geographic format")
     if information.get("catalog_sha256") != sha256(catalog.read_bytes()).hexdigest():
         raise ValueError("offline catalog SHA256 mismatch")
-    if information.get("feature_count", 0) < 10000:
-        raise ValueError("Natural Earth catalog incomplete")
+    with catalog.open("r", encoding="utf-8") as stream:
+        if stream.readline().strip() != "CARTORIG_ATOMIC_GEO_V1":
+            raise ValueError("invalid catalog header")
+        actual_count = sum(1 for line in stream if line.strip() and not line.startswith("#"))
+    if actual_count < 10000 or information.get("feature_count") != actual_count:
+        raise ValueError("Natural Earth catalog incomplete or incorrect feature count")
     if not binary.is_file() or binary.stat().st_size < 10000:
         raise ValueError("missing or suspiciously small native OpenFX binary")
 
