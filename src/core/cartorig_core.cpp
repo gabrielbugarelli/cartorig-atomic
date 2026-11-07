@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cctype>
 #include <limits>
+#include <iomanip>
 #include <sstream>
 #include <stdexcept>
 #include <tuple>
@@ -402,6 +403,116 @@ SceneResult MapScene::setRouteReveal(std::string_view objectId, double progress)
         }
     }
     return {SceneError::MissingFeature, ""};
+}
+
+
+namespace {
+
+[[nodiscard]] bool safeId(std::string_view id) {
+    if (id.empty()) return false;
+    for (unsigned char ch : id) {
+        if (!(std::isalnum(ch) || ch == '_' || ch == '-' ||
+              ch == ':' || ch == '.')) return false;
+    }
+    return true;
+}
+
+void serializeStyle(std::ostream& output, const Style& s) {
+    for (double value : {s.fill.red,s.fill.green,s.fill.blue,s.fill.alpha,
+                         s.stroke.red,s.stroke.green,s.stroke.blue,s.stroke.alpha,
+                         s.opacity,s.strokeWidthPixels})
+        output << '\t' << value;
+    output << '\t' << (s.visible ? 1 : 0);
+}
+
+[[nodiscard]] Style readStyle(const std::vector<std::string>& fields, std::size_t offset) {
+    if (fields.size() != offset + 11)
+        throw std::invalid_argument("corrupt style fields in scene snapshot");
+    Style s;
+    s.fill = {number(fields[offset]),number(fields[offset+1]),
+              number(fields[offset+2]),number(fields[offset+3])};
+    s.stroke = {number(fields[offset+4]),number(fields[offset+5]),
+                number(fields[offset+6]),number(fields[offset+7])};
+    s.opacity = number(fields[offset+8]);
+    s.strokeWidthPixels = number(fields[offset+9]);
+    if (fields[offset+10] == "1") s.visible=true;
+    else if (fields[offset+10] == "0") s.visible=false;
+    else throw std::invalid_argument("invalid visibility flag");
+    if (!validStyle(s)) throw std::invalid_argument("invalid scene style");
+    return s;
+}
+
+} // namespace
+
+std::string encodeScene(const MapScene& scene) {
+    std::ostringstream out;
+    out << std::setprecision(17);
+    out << "CARTORIG_ATOMIC_SCENE_V1\n";
+    const auto& camera = scene.camera();
+    out << "CAMERA\t" << camera.center.longitude << '\t'
+        << camera.center.latitude << '\t' << camera.scale << '\n';
+    for (const auto& region : scene.regions()) {
+        if (!safeId(region.objectId) || !safeId(region.featureId))
+            throw std::invalid_argument("unsafe region id in scene");
+        out << "REGION\t" << region.objectId << '\t' << region.featureId;
+        serializeStyle(out,region.style);
+        out << '\n';
+    }
+    for (const auto& route : scene.routes()) {
+        if (!safeId(route.objectId) || !safeId(route.originFeatureId) ||
+            !safeId(route.destinationRegionId))
+            throw std::invalid_argument("unsafe route id in scene");
+        out << "ROUTE\t" << route.objectId << '\t'
+            << route.originFeatureId << '\t' << route.destinationRegionId
+            << '\t' << route.to.longitude << '\t' << route.to.latitude;
+        serializeStyle(out,route.style);
+        out << '\t' << route.reveal << '\n';
+    }
+    return out.str();
+}
+
+MapScene decodeScene(std::string_view snapshot, const Catalog& catalog) {
+    std::istringstream in(std::string{snapshot});
+    std::string line;
+    if (!std::getline(in,line) || line != "CARTORIG_ATOMIC_SCENE_V1")
+        throw std::invalid_argument("unsupported scene format");
+    MapScene scene;
+    bool cameraSeen=false;
+    while (std::getline(in,line)) {
+        if (line.empty()) continue;
+        const auto f=split(line,'\t');
+        if (f.empty()) continue;
+        if (f[0] == "CAMERA") {
+            if (f.size()!=4 || cameraSeen)
+                throw std::invalid_argument("invalid or duplicate camera");
+            const auto state=scene.setCamera({{number(f[1]),number(f[2])},number(f[3])});
+            if (!state) throw std::invalid_argument("invalid camera pose");
+            cameraSeen=true;
+        } else if (f[0] == "REGION") {
+            if (f.size()!=14 || !safeId(f[1]) || !safeId(f[2]))
+                throw std::invalid_argument("corrupt region record");
+            const auto style=readStyle(f,3);
+            if (!scene.addRegion(catalog,f[1],f[2]) ||
+                !scene.setRegionStyle(f[1],style))
+                throw std::invalid_argument("invalid geographic region in snapshot");
+        } else if (f[0] == "ROUTE") {
+            if (f.size()!=18 || !safeId(f[1]) ||
+                !safeId(f[2]) || !safeId(f[3]))
+                throw std::invalid_argument("corrupt route record");
+            const GeoPoint to{number(f[4]),number(f[5])};
+            const auto style=readStyle(
+                std::vector<std::string>(f.begin(),f.end()-1),6);
+            const double reveal=number(f[17]);
+            if (!scene.addRoute(catalog,f[1],f[2],f[3],to) ||
+                !scene.setRouteStyle(f[1],style) ||
+                !scene.setRouteReveal(f[1],reveal))
+                throw std::invalid_argument("invalid route/endpoint in snapshot");
+        } else {
+            throw std::invalid_argument("unknown scene record");
+        }
+    }
+    if (!cameraSeen) throw std::invalid_argument("missing camera in scene snapshot");
+    return scene; // A failed read never mutates an existing MapScene.
 }
 
 } // namespace cartorig
