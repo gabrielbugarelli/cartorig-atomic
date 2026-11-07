@@ -144,6 +144,10 @@ private:
     std::vector<Route> routes_;
 };
 
+// Versioned scene snapshot: object identities, visual state and camera; no host keyframes.
+[[nodiscard]] std::string encodeScene(const MapScene& scene);
+[[nodiscard]] MapScene decodeScene(std::string_view snapshot, const Catalog& catalog);
+
 // Native Resolve timeline/keyframe ownership remains in a future host adapter.
 // The core intentionally contains no duplicate CartoRig keyframe timeline.
 
