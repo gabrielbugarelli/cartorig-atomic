@@ -1,0 +1,9 @@
+# Local builds and official Natural Earth source cache
+build/
+dist/
+.cache/
+__pycache__/
+*.pyc
+.vs/
+.idea/
+.DS_Store

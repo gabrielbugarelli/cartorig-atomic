@@ -1,0 +1,2 @@
+# Build-time dependency only. End-user installation requires no Python.
+pyshp==2.3.1
