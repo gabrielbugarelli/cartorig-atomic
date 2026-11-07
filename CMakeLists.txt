@@ -59,4 +59,15 @@ if(CARTORIG_BUILD_OFX)
     else()
         target_compile_options(CartoRigAtomic PRIVATE -Wall -Wextra -Wpedantic)
     endif()
+
+    add_executable(cartorig_ofx_contract_tests tests/ofx_contract_tests.cpp)
+    target_include_directories(cartorig_ofx_contract_tests PRIVATE "${OPENFX_INCLUDE_DIR}")
+    target_compile_features(cartorig_ofx_contract_tests PRIVATE cxx_std_17)
+    if(UNIX AND NOT APPLE)
+        target_link_libraries(cartorig_ofx_contract_tests PRIVATE dl)
+    endif()
+    add_test(NAME cartorig-openfx-binary-contract
+        COMMAND $<TARGET_FILE:cartorig_ofx_contract_tests> $<TARGET_FILE:CartoRigAtomic>)
+    set_tests_properties(cartorig-openfx-binary-contract PROPERTIES
+        ENVIRONMENT "CARTORIG_ATOMIC_DATA_DIR=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")
 endif()
