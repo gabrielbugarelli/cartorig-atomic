@@ -28,9 +28,6 @@ int main(int argc,char** argv) {
         if(!focus)throw std::runtime_error("cannot focus São Paulo city");
         auto pose=session.scene().camera();
         pose.scale=5.0;
-        MapScene view=session.scene();
-        if(!view.setCamera(pose))throw std::runtime_error("camera zoom invalid");
-
         const auto route=session.addRoute(
             "Brasília","Amapá",std::nullopt,"Macapá");
         if(!route)throw std::runtime_error(
@@ -50,6 +47,8 @@ int main(int argc,char** argv) {
         if(restored.scene().regions().size()!=1 || restored.scene().routes().size()!=1)
             throw std::runtime_error("real scene persistence lost objects");
 
+        MapScene view=session.scene();
+        if(!view.setCamera(pose))throw std::runtime_error("camera zoom invalid");
         const auto frame=renderMap(catalog,view,640,360);
         if(frame.rgba.size()!=640u*360u*4u)
             throw std::runtime_error("actual geometry did not render RGBA");
