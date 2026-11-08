@@ -465,7 +465,7 @@ OfxStatus onInstanceChanged(OfxImageEffectHandle effect,OfxPropertySetHandle arg
         commitSession(effect,*state,session,"Selected object style updated.");
         return kOfxStatOK;
     }
-    if(key==kCamera || key==kZoom || key==kOcean || key==kLand)
+    if(key==kCamera || key==kZoom || key==kOcean || key==kLand || key==kDiagnostic)
         return kOfxStatOK; // render reads animated/updated host params.
     return kOfxStatReplyDefault;
 }
@@ -618,7 +618,18 @@ OfxStatus describeContext(OfxImageEffectHandle effect,OfxPropertySetHandle args)
         property->propSetDouble(p,kOfxParamPropDefault,1,0);
     }
     defineParam(set,kOfxParamTypePushButton,kAddRoute,"Add Route");
-    defineText(set,kStatus,"Status","Ready — loading offline data",false,true);
+    {
+        auto p=defineParam(set,kOfxParamTypeBoolean,kDiagnostic,
+                           "Diagnostic Color Pattern (test only)");
+        property->propSetInt(p,kOfxParamPropDefault,0,0);
+    }
+    {
+        auto p=defineText(set,kStatus,"Render / Data Status",
+                          "Catalog not checked yet",true,false);
+        // A visible informational label is more useful than a disabled
+        // parameter, which some hosts reject when the plugin updates it.
+        property->propSetString(p,kOfxParamPropStringMode,0,kOfxParamStringIsLabel);
+    }
     {
         auto p=defineText(set,kScene,"Internal Scene Snapshot","",true,true);
         property->propSetInt(p,kOfxParamPropSecret,0,1);
@@ -627,7 +638,7 @@ OfxStatus describeContext(OfxImageEffectHandle effect,OfxPropertySetHandle args)
     definePage(set,"Objects",{kList,kSelect,kSelectedInfo,kFill,kStroke,kOpacity,kWidth,kVisible});
     definePage(set,"Camera",{kCamera,kZoom,kOcean,kLand});
     definePage(set,"Route",{kOrigin,kDestination,kArrivalCity,kManualEndpoint,kEndpoint,kAddRoute});
-    definePage(set,"Info",{kStatus});
+    definePage(set,"Info",{kStatus,kDiagnostic});
 
     return kOfxStatOK;
 }
@@ -644,8 +655,15 @@ OfxStatus createInstance(OfxImageEffectHandle effect) {
     Instance* owned=state.release();
     try {
         std::lock_guard<std::recursive_mutex> guard(owned->mutex);
-        if(!owned->dataIssue.empty())setStatus(effect,owned->dataIssue);
-        else refreshFromProject(effect,*owned);
+        if(!owned->dataIssue.empty()) {
+            setStatus(effect,std::string("CATALOG ERROR (magenta image): ")+
+                      owned->dataIssue);
+        } else {
+            refreshFromProject(effect,*owned);
+            setStatus(effect,"OFFLINE DATA OK: "+
+                      std::to_string(owned->catalog->size())+
+                      " places. Enable Diagnostic Color Pattern to test the pixel pipeline.");
+        }
     } catch (...) {
         // Host may reject UI updates during instance creation; if the
         // output clip is valid, allow user interaction to initialize it.
@@ -867,8 +885,13 @@ OfxStatus mainEntry(const char* action,const void* rawHandle,
         if(std::strcmp(action,kOfxImageEffectActionRender)==0)return render(effect,inArgs);
         return kOfxStatReplyDefault;
     } catch(const std::bad_alloc&) {
+        logFailure(std::string("HOST_ACTION_ERROR: out of memory in ")+action);
         return kOfxStatErrMemory;
+    } catch(const std::exception& error) {
+        logFailure(std::string("HOST_ACTION_ERROR in ")+action+": "+error.what());
+        return kOfxStatFailed;
     } catch(...) {
+        logFailure(std::string("HOST_ACTION_ERROR: unknown exception in ")+action);
         // Never throw across the OpenFX C ABI into Resolve.
         return kOfxStatFailed;
     }
