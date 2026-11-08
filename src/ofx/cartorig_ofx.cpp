@@ -17,6 +17,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <chrono>
+#include <limits>
 #include <fstream>
 #include <memory>
 #include <mutex>
@@ -70,6 +72,7 @@ constexpr const char* kAddRoute = "addRoute";
 constexpr const char* kOcean = "oceanFill";
 constexpr const char* kLand = "landFill";
 constexpr const char* kStatus = "statusMessage";
+constexpr const char* kDiagnostic = "diagnosticPattern";
 
 struct Instance {
     OfxImageClipHandle output = nullptr;
@@ -84,6 +87,42 @@ bool ok(OfxStatus status) { return status == kOfxStatOK; }
 void verify(OfxStatus status, const char* action) {
     if (!ok(status)) throw std::runtime_error(std::string(action) +
                                               " (OFX status " + std::to_string(status) + ")");
+}
+
+// Keep a small, local diagnostic log. No network traffic, no debug UI
+// window, and no per-frame success logging. Failed renders are traceable
+// even when the host only presents a black frame.
+void logFailure(std::string_view message) noexcept {
+    try {
+        fs::path root;
+#if defined(_WIN32)
+        std::wstring value(4096, L'\0');
+        const DWORD n=GetEnvironmentVariableW(L"LOCALAPPDATA",value.data(),
+                                               static_cast<DWORD>(value.size()));
+        if(n>0 && n<value.size()) {
+            value.resize(n);
+            root=fs::path(value);
+        }
+#else
+        if(const char* home=std::getenv("HOME")) {
+            if(*home) root=fs::path(home)/".local"/"state";
+        }
+#endif
+        if(root.empty())root=fs::temp_directory_path();
+        const auto folder=root/"CartoRigAtomic";
+        fs::create_directories(folder);
+        const auto log=folder/"cartorig-ofx.log";
+        if(fs::exists(log) && fs::file_size(log)>131072u) {
+            std::ofstream truncate(log,std::ios::trunc);
+            truncate << "CartoRig Atomic diagnostic log rotated\n";
+        }
+        std::ofstream output(log,std::ios::app);
+        const auto now=std::chrono::duration_cast<std::chrono::seconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        output<<"epoch="<<now<<" "<<message<<"\n";
+    } catch (...) {
+        // Diagnostic logging must never crash the DaVinci Resolve host.
+    }
 }
 
 fs::path libraryPath() {
@@ -134,6 +173,7 @@ std::shared_ptr<const Catalog> getCatalog(std::string& issue) {
             cached = std::move(loaded);
         } catch (const std::exception& error) {
             cachedIssue = error.what();
+            logFailure(std::string("CATALOG_ERROR: ")+cachedIssue);
             cached = std::make_shared<Catalog>();
         }
     }
@@ -425,7 +465,7 @@ OfxStatus onInstanceChanged(OfxImageEffectHandle effect,OfxPropertySetHandle arg
         commitSession(effect,*state,session,"Selected object style updated.");
         return kOfxStatOK;
     }
-    if(key==kCamera || key==kZoom || key==kOcean || key==kLand)
+    if(key==kCamera || key==kZoom || key==kOcean || key==kLand || key==kDiagnostic)
         return kOfxStatOK; // render reads animated/updated host params.
     return kOfxStatReplyDefault;
 }
@@ -578,7 +618,18 @@ OfxStatus describeContext(OfxImageEffectHandle effect,OfxPropertySetHandle args)
         property->propSetDouble(p,kOfxParamPropDefault,1,0);
     }
     defineParam(set,kOfxParamTypePushButton,kAddRoute,"Add Route");
-    defineText(set,kStatus,"Status","Ready — loading offline data",false,true);
+    {
+        auto p=defineParam(set,kOfxParamTypeBoolean,kDiagnostic,
+                           "Diagnostic Color Pattern (test only)");
+        property->propSetInt(p,kOfxParamPropDefault,0,0);
+    }
+    {
+        auto p=defineText(set,kStatus,"Render / Data Status",
+                          "Catalog not checked yet",true,false);
+        // A visible informational label is more useful than a disabled
+        // parameter, which some hosts reject when the plugin updates it.
+        property->propSetString(p,kOfxParamPropStringMode,0,kOfxParamStringIsLabel);
+    }
     {
         auto p=defineText(set,kScene,"Internal Scene Snapshot","",true,true);
         property->propSetInt(p,kOfxParamPropSecret,0,1);
@@ -587,7 +638,7 @@ OfxStatus describeContext(OfxImageEffectHandle effect,OfxPropertySetHandle args)
     definePage(set,"Objects",{kList,kSelect,kSelectedInfo,kFill,kStroke,kOpacity,kWidth,kVisible});
     definePage(set,"Camera",{kCamera,kZoom,kOcean,kLand});
     definePage(set,"Route",{kOrigin,kDestination,kArrivalCity,kManualEndpoint,kEndpoint,kAddRoute});
-    definePage(set,"Info",{kStatus});
+    definePage(set,"Info",{kStatus,kDiagnostic});
 
     return kOfxStatOK;
 }
@@ -604,8 +655,15 @@ OfxStatus createInstance(OfxImageEffectHandle effect) {
     Instance* owned=state.release();
     try {
         std::lock_guard<std::recursive_mutex> guard(owned->mutex);
-        if(!owned->dataIssue.empty())setStatus(effect,owned->dataIssue);
-        else refreshFromProject(effect,*owned);
+        if(!owned->dataIssue.empty()) {
+            setStatus(effect,std::string("CATALOG ERROR (magenta image): ")+
+                      owned->dataIssue);
+        } else {
+            refreshFromProject(effect,*owned);
+            setStatus(effect,"OFFLINE DATA OK: "+
+                      std::to_string(owned->catalog->size())+
+                      " places. Enable Diagnostic Color Pattern to test the pixel pipeline.");
+        }
     } catch (...) {
         // Host may reject UI updates during instance creation; if the
         // output clip is valid, allow user interaction to initialize it.
@@ -645,6 +703,50 @@ struct OutputImage {
     }
 };
 
+enum class DiagnosticMode { TestPattern, CatalogError, RenderError };
+
+// Fully opaque, high-contrast host diagnostics. Never return a transparent
+// black image as the only signal of an unusable offline data pack.
+void paintDiagnostic(void* pixels, int rowBytes, const int (&bounds)[4],
+                     bool floating, DiagnosticMode mode) {
+    const int width=bounds[2]-bounds[0], height=bounds[3]-bounds[1];
+    const int bytesPerPixel=floating?16:4;
+    if(!pixels || width<=0 || height<=0 ||
+       rowBytes==0 || std::abs(static_cast<long long>(rowBytes)) <
+                       static_cast<long long>(width)*bytesPerPixel)
+        throw std::invalid_argument("invalid host pixel layout for diagnostics");
+    for(int y=0;y<height;++y) {
+        auto* row=static_cast<unsigned char*>(pixels)+
+                  static_cast<std::ptrdiff_t>(y)*rowBytes;
+        for(int x=0;x<width;++x) {
+            const bool bright=((x/28)+(y/28))%2==0;
+            std::array<std::uint8_t,4> rgba{};
+            if(mode==DiagnosticMode::TestPattern) {
+                // Alternating cyan / yellow / blue makes channel order errors
+                // obvious without depending on source data.
+                switch((x*3)/std::max(1,width)) {
+                    case 0: rgba={0,static_cast<std::uint8_t>(bright?255:170),255,255};break;
+                    case 1: rgba={255,255,static_cast<std::uint8_t>(bright?0:90),255};break;
+                    default: rgba={50,static_cast<std::uint8_t>(bright?125:45),255,255};break;
+                }
+            } else if(mode==DiagnosticMode::CatalogError) {
+                rgba=bright ? std::array<std::uint8_t,4>{255,0,220,255} :
+                              std::array<std::uint8_t,4>{75,0,70,255};
+            } else {
+                rgba=bright ? std::array<std::uint8_t,4>{255,40,30,255} :
+                              std::array<std::uint8_t,4>{90,20,0,255};
+            }
+            if(floating) {
+                auto* target=reinterpret_cast<float*>(row)+4u*static_cast<std::size_t>(x);
+                for(int ch=0;ch<4;++ch)
+                    target[ch]=static_cast<float>(rgba[ch])/255.0f;
+            } else {
+                std::memcpy(row+4u*static_cast<std::size_t>(x),rgba.data(),4);
+            }
+        }
+    }
+}
+
 OfxStatus render(OfxImageEffectHandle effect,OfxPropertySetHandle args) {
     Instance* state=instanceData(effect);
     if(!state)return kOfxStatFailed;
@@ -679,17 +781,21 @@ OfxStatus render(OfxImageEffectHandle effect,OfxPropertySetHandle args) {
     const int imageHeight=bounds[3]-bounds[1];
     if(imageWidth<=0 || imageHeight<=0)return kOfxStatErrFormat;
     if(rowBytes==0)return kOfxStatErrFormat;
-
-    if(!state->dataIssue.empty()) {
-        // No data means no fabricated map. The error is exposed in the
-        // native Inspector; return blank pixels rather than crash.
-        for(int y=0;y<imageHeight;++y) {
-            auto* row=static_cast<unsigned char*>(pixels)+static_cast<std::ptrdiff_t>(y)*rowBytes;
-            std::memset(row,0,static_cast<std::size_t>(imageWidth)*(floating?16:4));
-        }
-        return kOfxStatOK;
+    const auto required=static_cast<long long>(imageWidth)*(floating?16:4);
+    if(std::abs(static_cast<long long>(rowBytes))<required) {
+        logFailure("IMAGE_LAYOUT_ERROR: host row stride shorter than RGBA pixel width");
+        return kOfxStatErrImageFormat;
     }
 
+    if(intValue(effect,kDiagnostic)!=0) {
+        paintDiagnostic(pixels,rowBytes,bounds,floating,DiagnosticMode::TestPattern);
+        return kOfxStatOK;
+    }
+    if(!state->dataIssue.empty()) {
+        paintDiagnostic(pixels,rowBytes,bounds,floating,DiagnosticMode::CatalogError);
+        return kOfxStatOK;
+    }
+    try {
     const auto snapshot=stringValue(effect,kScene);
     InspectorSession session(*state->catalog);
     session.restore(snapshot);
@@ -739,6 +845,15 @@ OfxStatus render(OfxImageEffectHandle effect,OfxPropertySetHandle args) {
         }
     }
     return kOfxStatOK;
+    } catch(const std::exception& error) {
+        logFailure(std::string("RENDER_ERROR: ")+error.what());
+        paintDiagnostic(pixels,rowBytes,bounds,floating,DiagnosticMode::RenderError);
+        return kOfxStatOK;
+    } catch(...) {
+        logFailure("RENDER_ERROR: unknown C++ exception");
+        paintDiagnostic(pixels,rowBytes,bounds,floating,DiagnosticMode::RenderError);
+        return kOfxStatOK;
+    }
 }
 
 OfxStatus mainEntry(const char* action,const void* rawHandle,
@@ -770,8 +885,13 @@ OfxStatus mainEntry(const char* action,const void* rawHandle,
         if(std::strcmp(action,kOfxImageEffectActionRender)==0)return render(effect,inArgs);
         return kOfxStatReplyDefault;
     } catch(const std::bad_alloc&) {
+        logFailure(std::string("HOST_ACTION_ERROR: out of memory in ")+action);
         return kOfxStatErrMemory;
+    } catch(const std::exception& error) {
+        logFailure(std::string("HOST_ACTION_ERROR in ")+action+": "+error.what());
+        return kOfxStatFailed;
     } catch(...) {
+        logFailure(std::string("HOST_ACTION_ERROR: unknown exception in ")+action);
         // Never throw across the OpenFX C ABI into Resolve.
         return kOfxStatFailed;
     }

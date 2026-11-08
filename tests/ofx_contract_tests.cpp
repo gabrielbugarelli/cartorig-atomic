@@ -353,7 +353,8 @@ std::string currentText(Effect& e,const char* name) {
 
 int main(int argc,char** argv) {
     try {
-        if(argc!=2)throw std::invalid_argument("usage: ofx_contract_tests /path/to/plugin.ofx");
+        if(!(argc==2 || (argc==3 && std::strcmp(argv[2],"--missing-data")==0)))
+            throw std::invalid_argument("usage: ofx_contract_tests <plugin.ofx> [--missing-data]");
         initializeSuites();
         Module module(argv[1]);
         using NumberFn=int (*)();
@@ -385,6 +386,39 @@ int main(int argc,char** argv) {
               "native Inspector has geographic authoring controls");
         check(plugin->mainEntry(kOfxActionCreateInstance,effectHandle(&e),nullptr,nullptr)==kOfxStatOK,
               "OpenFX instance creation and catalog availability");
+
+        if(argc==3) {
+            check(currentText(e,"statusMessage").find("CATALOG ERROR")!=std::string::npos,
+                  "data-load failure visible in native Inspector Info");
+            Properties args;
+            setDouble(asProps(&args),kOfxPropTime,0,0.0);
+            const int renderBounds[4]={0,0,640,360};
+            setIntN(asProps(&args),kOfxImageEffectPropRenderWindow,4,renderBounds);
+            const double renderScale[2]={1,1};
+            setDoubleN(asProps(&args),kOfxImageEffectPropRenderScale,2,renderScale);
+            check(plugin->mainEntry(kOfxImageEffectActionRender,effectHandle(&e),
+                                    asProps(&args),nullptr)==kOfxStatOK,
+                  "missing geographic data must not cause hard render failure");
+            const auto center=4u*(180u*640u+320u);
+            check(e.frame[center] > 50 && e.frame[center+2] > 50 &&
+                  e.frame[center+1] == 0 && e.frame[center+3] == 255,
+                  "missing data shows opaque magenta diagnostic, never transparent black");
+            integer(e,"diagnosticPattern",1);
+            changed(plugin,e,"diagnosticPattern");
+            check(plugin->mainEntry(kOfxImageEffectActionRender,effectHandle(&e),
+                                    asProps(&args),nullptr)==kOfxStatOK,
+                  "diagnostic test pattern works independent of geographic data");
+            const auto yellow=4u*(180u*640u+300u);
+            check(e.frame[yellow] == 255 && e.frame[yellow+1] == 255,
+                  "diagnostic pattern reveals live OFX pixel pipeline");
+            check(plugin->mainEntry(kOfxActionDestroyInstance,effectHandle(&e),
+                                    nullptr,nullptr)==kOfxStatOK,
+                  "missing-data instance destroyed cleanly");
+            check(plugin->mainEntry(kOfxActionUnload,nullptr,nullptr,nullptr)==kOfxStatOK,
+                  "host unloads missing-data scenario");
+            std::cout<<"PASS: "<<checks<<" missing-data and diagnostic-pattern ABI checks\n";
+            return 0;
+        }
 
         text(e,"locationSearch","Rio de Janeiro");
         integer(e,"locationType",2);

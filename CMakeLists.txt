@@ -73,4 +73,9 @@ if(CARTORIG_BUILD_OFX)
         COMMAND $<TARGET_FILE:cartorig_ofx_contract_tests> $<TARGET_FILE:CartoRigAtomic>)
     set_tests_properties(cartorig-openfx-binary-contract PROPERTIES
         ENVIRONMENT "CARTORIG_ATOMIC_DATA_DIR=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")
+    add_test(NAME cartorig-openfx-no-data-diagnostic
+        COMMAND $<TARGET_FILE:cartorig_ofx_contract_tests>
+                $<TARGET_FILE:CartoRigAtomic> --missing-data)
+    set_tests_properties(cartorig-openfx-no-data-diagnostic PROPERTIES
+        ENVIRONMENT "CARTORIG_ATOMIC_DATA_DIR=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/definitely-missing-directory")
 endif()
