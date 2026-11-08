@@ -707,9 +707,9 @@ void paintDiagnostic(void* pixels, int rowBytes, const int (&bounds)[4],
                 // Alternating cyan / yellow / blue makes channel order errors
                 // obvious without depending on source data.
                 switch((x*3)/std::max(1,width)) {
-                    case 0: rgba={0,bright?255u:170u,255,255};break;
-                    case 1: rgba={255,255,bright?0u:90u,255};break;
-                    default: rgba={50,bright?125u:45u,255,255};break;
+                    case 0: rgba={0,static_cast<std::uint8_t>(bright?255:170),255,255};break;
+                    case 1: rgba={255,255,static_cast<std::uint8_t>(bright?0:90),255};break;
+                    default: rgba={50,static_cast<std::uint8_t>(bright?125:45),255,255};break;
                 }
             } else if(mode==DiagnosticMode::CatalogError) {
                 rgba=bright ? std::array<std::uint8_t,4>{255,0,220,255} :
@@ -763,17 +763,21 @@ OfxStatus render(OfxImageEffectHandle effect,OfxPropertySetHandle args) {
     const int imageHeight=bounds[3]-bounds[1];
     if(imageWidth<=0 || imageHeight<=0)return kOfxStatErrFormat;
     if(rowBytes==0)return kOfxStatErrFormat;
-
-    if(!state->dataIssue.empty()) {
-        // No data means no fabricated map. The error is exposed in the
-        // native Inspector; return blank pixels rather than crash.
-        for(int y=0;y<imageHeight;++y) {
-            auto* row=static_cast<unsigned char*>(pixels)+static_cast<std::ptrdiff_t>(y)*rowBytes;
-            std::memset(row,0,static_cast<std::size_t>(imageWidth)*(floating?16:4));
-        }
-        return kOfxStatOK;
+    const auto required=static_cast<long long>(imageWidth)*(floating?16:4);
+    if(std::abs(static_cast<long long>(rowBytes))<required) {
+        logFailure("IMAGE_LAYOUT_ERROR: host row stride shorter than RGBA pixel width");
+        return kOfxStatErrImageFormat;
     }
 
+    if(intValue(effect,kDiagnostic)!=0) {
+        paintDiagnostic(pixels,rowBytes,bounds,floating,DiagnosticMode::TestPattern);
+        return kOfxStatOK;
+    }
+    if(!state->dataIssue.empty()) {
+        paintDiagnostic(pixels,rowBytes,bounds,floating,DiagnosticMode::CatalogError);
+        return kOfxStatOK;
+    }
+    try {
     const auto snapshot=stringValue(effect,kScene);
     InspectorSession session(*state->catalog);
     session.restore(snapshot);
@@ -823,6 +827,15 @@ OfxStatus render(OfxImageEffectHandle effect,OfxPropertySetHandle args) {
         }
     }
     return kOfxStatOK;
+    } catch(const std::exception& error) {
+        logFailure(std::string("RENDER_ERROR: ")+error.what());
+        paintDiagnostic(pixels,rowBytes,bounds,floating,DiagnosticMode::RenderError);
+        return kOfxStatOK;
+    } catch(...) {
+        logFailure("RENDER_ERROR: unknown C++ exception");
+        paintDiagnostic(pixels,rowBytes,bounds,floating,DiagnosticMode::RenderError);
+        return kOfxStatOK;
+    }
 }
 
 OfxStatus mainEntry(const char* action,const void* rawHandle,
