@@ -89,6 +89,42 @@ void verify(OfxStatus status, const char* action) {
                                               " (OFX status " + std::to_string(status) + ")");
 }
 
+// Keep a small, local diagnostic log. No network traffic, no debug UI
+// window, and no per-frame success logging. Failed renders are traceable
+// even when the host only presents a black frame.
+void logFailure(std::string_view message) noexcept {
+    try {
+        fs::path root;
+#if defined(_WIN32)
+        std::wstring value(4096, L'\0');
+        const DWORD n=GetEnvironmentVariableW(L"LOCALAPPDATA",value.data(),
+                                               static_cast<DWORD>(value.size()));
+        if(n>0 && n<value.size()) {
+            value.resize(n);
+            root=fs::path(value);
+        }
+#else
+        if(const char* home=std::getenv("HOME")) {
+            if(*home) root=fs::path(home)/".local"/"state";
+        }
+#endif
+        if(root.empty())root=fs::temp_directory_path();
+        const auto folder=root/"CartoRigAtomic";
+        fs::create_directories(folder);
+        const auto log=folder/"cartorig-ofx.log";
+        if(fs::exists(log) && fs::file_size(log)>131072u) {
+            std::ofstream truncate(log,std::ios::trunc);
+            truncate << "CartoRig Atomic diagnostic log rotated\n";
+        }
+        std::ofstream output(log,std::ios::app);
+        const auto now=std::chrono::duration_cast<std::chrono::seconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        output<<"epoch="<<now<<" "<<message<<"\n";
+    } catch (...) {
+        // Diagnostic logging must never crash the DaVinci Resolve host.
+    }
+}
+
 fs::path libraryPath() {
 #if defined(_WIN32)
     HMODULE module = nullptr;
@@ -137,6 +173,7 @@ std::shared_ptr<const Catalog> getCatalog(std::string& issue) {
             cached = std::move(loaded);
         } catch (const std::exception& error) {
             cachedIssue = error.what();
+            logFailure(std::string("CATALOG_ERROR: ")+cachedIssue);
             cached = std::make_shared<Catalog>();
         }
     }
