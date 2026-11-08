@@ -17,6 +17,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <chrono>
+#include <limits>
 #include <fstream>
 #include <memory>
 #include <mutex>
@@ -70,6 +72,7 @@ constexpr const char* kAddRoute = "addRoute";
 constexpr const char* kOcean = "oceanFill";
 constexpr const char* kLand = "landFill";
 constexpr const char* kStatus = "statusMessage";
+constexpr const char* kDiagnostic = "diagnosticPattern";
 
 struct Instance {
     OfxImageClipHandle output = nullptr;
