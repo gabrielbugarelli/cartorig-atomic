@@ -685,6 +685,50 @@ struct OutputImage {
     }
 };
 
+enum class DiagnosticMode { TestPattern, CatalogError, RenderError };
+
+// Fully opaque, high-contrast host diagnostics. Never return a transparent
+// black image as the only signal of an unusable offline data pack.
+void paintDiagnostic(void* pixels, int rowBytes, const int (&bounds)[4],
+                     bool floating, DiagnosticMode mode) {
+    const int width=bounds[2]-bounds[0], height=bounds[3]-bounds[1];
+    const int bytesPerPixel=floating?16:4;
+    if(!pixels || width<=0 || height<=0 ||
+       rowBytes==0 || std::abs(static_cast<long long>(rowBytes)) <
+                       static_cast<long long>(width)*bytesPerPixel)
+        throw std::invalid_argument("invalid host pixel layout for diagnostics");
+    for(int y=0;y<height;++y) {
+        auto* row=static_cast<unsigned char*>(pixels)+
+                  static_cast<std::ptrdiff_t>(y)*rowBytes;
+        for(int x=0;x<width;++x) {
+            const bool bright=((x/28)+(y/28))%2==0;
+            std::array<std::uint8_t,4> rgba{};
+            if(mode==DiagnosticMode::TestPattern) {
+                // Alternating cyan / yellow / blue makes channel order errors
+                // obvious without depending on source data.
+                switch((x*3)/std::max(1,width)) {
+                    case 0: rgba={0,bright?255u:170u,255,255};break;
+                    case 1: rgba={255,255,bright?0u:90u,255};break;
+                    default: rgba={50,bright?125u:45u,255,255};break;
+                }
+            } else if(mode==DiagnosticMode::CatalogError) {
+                rgba=bright ? std::array<std::uint8_t,4>{255,0,220,255} :
+                              std::array<std::uint8_t,4>{75,0,70,255};
+            } else {
+                rgba=bright ? std::array<std::uint8_t,4>{255,40,30,255} :
+                              std::array<std::uint8_t,4>{90,20,0,255};
+            }
+            if(floating) {
+                auto* target=reinterpret_cast<float*>(row)+4u*static_cast<std::size_t>(x);
+                for(int ch=0;ch<4;++ch)
+                    target[ch]=static_cast<float>(rgba[ch])/255.0f;
+            } else {
+                std::memcpy(row+4u*static_cast<std::size_t>(x),rgba.data(),4);
+            }
+        }
+    }
+}
+
 OfxStatus render(OfxImageEffectHandle effect,OfxPropertySetHandle args) {
     Instance* state=instanceData(effect);
     if(!state)return kOfxStatFailed;
