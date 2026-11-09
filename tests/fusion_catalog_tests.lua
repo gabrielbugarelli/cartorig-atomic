@@ -23,6 +23,10 @@ local rows = {
 }
 local catalog = Catalog.from_lines(rows)
 check(catalog.count == 8, "all typed geographic records loaded")
+check(#catalog:search("South America", "Continent") == 1,
+      "continent filter returns a distinct geographic group")
+check(catalog:search("South America", "Continent")[1].point == nil,
+      "continent never invents a focus point")
 check(catalog:get("ne10m:city:sp").point.lon == -46.6333, "WGS84 coordinates survive")
 check(catalog:get("ne10m:state:sp").point == nil,
       "State region never silently receives synthetic centroid")
