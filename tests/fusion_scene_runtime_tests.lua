@@ -98,6 +98,10 @@ local function new_comp()
         t.Size = port("Size")
         t.Center = port("Center")
         t.WriteLength = port("WriteLength")
+        t.TopLeftRed = port("TopLeftRed")
+        t.TopLeftGreen = port("TopLeftGreen")
+        t.TopLeftBlue = port("TopLeftBlue")
+        t.TopLeftAlpha = port("TopLeftAlpha")
         t.Background = port("Background")
         t.Foreground = port("Foreground")
         t.EffectMask = port("EffectMask")
@@ -581,5 +585,58 @@ expect(eraseMask.animations.WriteLength[345]==1 and
 expect(eraseControl:GetData("CartoRigAtomic.MotionBindingV2").presetId==
        "MO-RTE-02","Route Erase carries its own persistent native Motion ID")
 _G.tool,_G.comp=savedVariantTool,savedVariantComp
+
+
+-- Region Fill Color changes target independent native channels, not Blend.
+-- A Region can retain opacity fade while its Fill RGBA is separately animated.
+local changedFillControl=fadeRegionControl
+changedFillControl.inputs.CR2MotionDuration=24
+changedFillControl.inputs.CR2ColorChosen=0
+changedFillControl.inputs.CR2TargetRed=0
+changedFillControl.inputs.CR2TargetGreen=1
+changedFillControl.inputs.CR2TargetBlue=0
+changedFillControl.inputs.CR2TargetAlpha=1
+comp.CurrentTime=360
+local saveColorTool,saveColorComp=_G.tool,_G.comp
+_G.tool,_G.comp=changedFillControl,comp
+local colorButton=assert((loadstring or load)(
+    changedFillControl.UserControls.CR2MotionColorChange.BTNCS_Execute))
+colorButton()
+expect(changedFillControl.animations.TopLeftRed==nil,
+       "Region Color Transition requires an explicitly confirmed target RGBA")
+changedFillControl.inputs.CR2ColorChosen=1
+colorButton()
+expect(changedFillControl.animations.TopLeftRed[360]==130/255 and
+       changedFillControl.animations.TopLeftRed[384]==0,
+       "Region Color Transition animates only its own Red component")
+expect(changedFillControl.animations.TopLeftGreen[360]==150/255 and
+       changedFillControl.animations.TopLeftGreen[384]==1,
+       "Green component retains correct source and target frames")
+expect(changedFillControl.animations.TopLeftAlpha[384]==1,
+       "Color Transition preserves independent Fill Alpha")
+expect(fadeRegionMerge.animations.Blend[334]==0,
+       "Region Fill Color animation does not overwrite an existing Opacity Fade")
+local instantId=runtime.add_region(comp,state,statePolygon)
+local instantControl=find(comp,instantId,"control")
+instantControl.inputs.CR2MotionDuration=24
+instantControl.inputs.CR2ColorChosen=1
+instantControl.inputs.CR2TargetRed=0
+instantControl.inputs.CR2TargetGreen=1
+instantControl.inputs.CR2TargetBlue=0
+instantControl.inputs.CR2TargetAlpha=1
+comp.CurrentTime=390
+_G.tool=instantControl
+local instantButton=assert((loadstring or load)(
+    instantControl.UserControls.CR2MotionInstantColor.BTNCS_Execute))
+instantButton()
+expect(instantControl.animations.TopLeftRed[389]==130/255 and
+       instantControl.animations.TopLeftRed[390]==0,
+       "Instant Color Change uses source at frame 389 and target at frame 390")
+expect(instantControl.animations.TopLeftGreen[389]==150/255 and
+       instantControl.animations.TopLeftGreen[390]==1,
+       "Instant Color Change respects discrete integer-frame switch")
+expect(find(comp,instantId,"merge").animations.Blend==nil,
+       "Instant Color Change never creates an opacity keyframe")
+_G.tool,_G.comp=saveColorTool,saveColorComp
 
 print("PASS: " .. checks .. " original Fusion graph / Control / Motion assertions")
