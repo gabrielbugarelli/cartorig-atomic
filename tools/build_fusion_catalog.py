@@ -139,7 +139,9 @@ def encode_record(kind: str, attrs: dict, shape, index: int,
         identity, kind, name, parent, country, continent, lon, lat,
         ";".join(aliases[:16]),
     ]
-    return "\t".join(escape(value) for value in values[:-1]) + [values[-1].replace("\t"," ").replace("\n"," ").replace("\r"," ").replace("\n"," ")][0])
+    safe_fields = [escape(value) for value in values[:-1]]
+    safe_aliases = values[-1].replace("\t", " ").replace("\r", " ").replace("\n", " ")
+    return "\t".join(safe_fields + [safe_aliases]))
 
 
 def build(output: Path, cache: Path) -> dict:
