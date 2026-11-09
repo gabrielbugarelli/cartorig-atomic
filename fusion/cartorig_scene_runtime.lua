@@ -671,6 +671,86 @@ if not ok then print("CartoRig Marker Pop: "..tostring(problem)) end
 ]==]
 end
 
+-- Fly To animates three true numeric host channels. UIManager only sets
+-- the explicit geographic target; the camera owns the persistent curves.
+local function camera_fly_callback()
+    return [==[
+local function fly()
+    local camera=tool
+    local host=camera and (camera.Comp or
+        (rawget(_G,"fu") and fu.CurrentComp) or rawget(_G,"comp"))
+    if not host then error("HOST_COMP: No Fusion composition") end
+    local tag=camera:GetData("CartoRigAtomic.IdentityV2")
+    if type(tag)~="table" or tag.role~="camera" then
+        error("OBJECT_ID: Select the CartoRig Camera")
+    end
+    local scene=host:GetData("CartoRigAtomic.SceneV2")
+    if type(scene)~="table" or scene.sceneId~=tag.sceneId or
+       scene.cameraId~=tag.objectId then
+        error("SCENE_CONTEXT: Invalid Camera scene identity")
+    end
+    local target=camera:GetData("CartoRigAtomic.CameraFlyTargetV2")
+    if type(target)~="table" or target.schemaVersion~=2 or
+       target.featureType~="City" or not target.featureId then
+        error("TARGET_REQUIRED: Select a City in Scene and Set Fly Target")
+    end
+    local duration=tonumber(camera:GetInput("CR2FlyDuration"))
+    local now=tonumber(host.CurrentTime)
+    local attrs=host:GetAttrs()
+    if not duration or duration%1~=0 or duration<1 or duration>10000 or
+       not now or now%1~=0 or now<0 or
+       not attrs or not tonumber(attrs.COMPN_RenderEnd) or
+       now+duration>tonumber(attrs.COMPN_RenderEnd) then
+        error("FRAME_OUT_OF_RANGE: Fly To exceeds Fusion render interval")
+    end
+    local columns={"CR2CameraLongitude","CR2CameraLatitude","Size"}
+    local source={}
+    for i,name in ipairs(columns) do
+        local port=camera[name]
+        if not port then error("HOST_CHANNEL: Missing native Camera "..name) end
+        local ok,existing=pcall(function()return port:GetConnectedOutput()end)
+        if not ok or existing then
+            error("MOTION_CONFLICT: Camera "..name.." is already animated")
+        end
+        source[i]=tonumber(camera:GetInput(name))
+        if not source[i] then error("HOST_VALUE: Missing Camera pose") end
+    end
+    local lon=tonumber(target.longitude)
+    local lat=tonumber(target.latitude)
+    local zoom=tonumber(target.zoom)
+    if not lon or lon < -180 or lon>180 or
+       not lat or lat < -90 or lat > 90 or
+       not zoom or zoom<.25 or zoom>100 then
+        error("TARGET_REQUIRED: Invalid WGS84 target pose")
+    end
+    local delta=lon-source[1]
+    if delta>180 then delta=delta-360 end
+    if delta< -180 then delta=delta+360 end
+    local destination={source[1]+delta,lat,zoom}
+    host:StartUndo("CartoRig: MO-CAM-01 Fly To Location")
+    local ok,issue=pcall(function()
+        for i,name in ipairs(columns) do
+            if not camera:AddModifier(name,"BezierSpline") then
+                error("HOST_ANIMATION: Cannot create native Camera Spline")
+            end
+            camera:SetInput(name,source[i],now)
+            camera:SetInput(name,destination[i],now+duration)
+        end
+        camera:SetData("CartoRigAtomic.MotionFlyV2",{
+            presetId="MO-CAM-01",schemaVersion=2,
+            featureId=target.featureId,
+            channels=columns,startFrame=now,endFrame=now+duration,
+            unwrappedTargetLongitude=destination[1],state="ANIMATED_PRESET"
+        })
+    end)
+    host:EndUndo(ok)
+    if not ok then error(issue) end
+end
+local ok,issue=pcall(fly)
+if not ok then print("CartoRig Fly To: "..tostring(issue)) end
+]==]
+end
+
 local function attach_inspector_motion(tool, kind)
     if kind~="Marker" and kind~="Label" and kind~="Camera" and
         kind~="Region" and kind~="Route" then
@@ -813,6 +893,18 @@ local function attach_inspector_motion(tool, kind)
             LINKID_DataType="Number",INPID_InputControl="SliderControl",
             ICS_ControlPage="Control",INP_Default=0,
             INP_MinScale=-90,INP_MaxScale=90,INP_External=false
+        }
+        controls.CR2FlyDuration={
+            LINKS_Name="Fly To Duration (Frames)",
+            LINKID_DataType="Number",INPID_InputControl="SliderControl",
+            ICS_ControlPage="Motion",INP_Integer=true,INP_Default=45,
+            INP_MinScale=1,INP_MaxScale=300,INP_External=false
+        }
+        controls.CR2MotionFly={
+            LINKS_Name="Apply MO-CAM-01 Fly To Location",
+            LINKID_DataType="Number",INPID_InputControl="ButtonControl",
+            ICS_ControlPage="Motion",INP_External=false,
+            BTNCS_Execute=camera_fly_callback()
         }
         controls.CR2TargetZoom={
             LINKS_Name="Target Zoom", LINKID_DataType="Number",
