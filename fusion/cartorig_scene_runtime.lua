@@ -254,11 +254,18 @@ local function cartorig_apply()
             actor:SetInput(propertyName,startValue,now)
             actor:SetInput(propertyName,target,now+duration)
         end
-        selected:SetData("CartoRigAtomic.MotionBindingV2",{
+        local binding={
             presetId=preset,channel=propertyName,
             startFrame=now,endFrame=now+duration,
             schemaVersion=2,state="ANIMATED_PRESET"
-        })
+        }
+        local registry=selected:GetData("CartoRigAtomic.MotionBindingsV2")
+        if type(registry)~="table" then registry={} end
+        local domain=kind=="Route" and "Draw Progress" or
+            kind=="Camera" and "Zoom" or "Object Opacity"
+        registry[domain]=binding
+        selected:SetData("CartoRigAtomic.MotionBindingsV2",registry)
+        selected:SetData("CartoRigAtomic.MotionBindingV2",binding)
     end)
     host:EndUndo(applied)
     if not applied then error(reason) end
@@ -363,6 +370,10 @@ local function cartorig_color()
             startFrame=now,endFrame=endFrame,
             schemaVersion=2,state="ANIMATED_PRESET"
         }
+        local registry=obj:GetData("CartoRigAtomic.MotionBindingsV2")
+        if type(registry)~="table" then registry={} end
+        registry["Fill Color"]=binding
+        obj:SetData("CartoRigAtomic.MotionBindingsV2",registry)
         obj:SetData("CartoRigAtomic.MotionBindingV2",binding)
     end)
     host:EndUndo(completed)
