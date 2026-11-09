@@ -34,6 +34,14 @@ local window = dispatcher:AddWindow({
         ui:Button{ ID = "Refresh", Text = "Refresh" },
         ui:Button{ ID = "Create", Text = "Create Scene" }
     },
+    ui:HGroup{
+        ui:Button{ ID = "SelectBase", Text = "Base Map Control" },
+        ui:Button{ ID = "SelectCamera", Text = "Camera Control" }
+    },
+    ui:HGroup{
+        ui:Combo{ ID = "DisplayMode" },
+        ui:Button{ ID = "SetMode", Text = "Set Display Mode" }
+    },
     ui:Label{ Text = "FIND OFFLINE LOCATION" },
     ui:HGroup{
         ui:LineEdit{ ID = "Search", Text = "" },
@@ -144,6 +152,10 @@ for _, style in ipairs({ "Straight", "Curved" }) do
     items.RouteStyle:AddItem(style)
 end
 items.RouteStyle.CurrentIndex = 0
+for _,mode in ipairs({ "Full Map", "Transparent Overlay" }) do
+    items.DisplayMode:AddItem(mode)
+end
+items.DisplayMode.CurrentIndex=0
 
 local function current_comp()
     -- Never fall back to the first composition when a different composition
@@ -187,6 +199,7 @@ local function sync()
         return
     end
     binding = current
+    items.DisplayMode.CurrentIndex=state.displayMode=="Transparent Overlay" and 1 or 0
     items.State.Text = "State: " .. state.state
     local groups = {}
     for _, group in ipairs(state.groups or {}) do groups[group.id] = group.name end
@@ -249,6 +262,20 @@ local function handle(action)
     else
         feedback("Operation completed in Fusion.")
     end
+end
+
+function window.On.SelectBase.Clicked(_)
+    handle(function(comp) return Runtime.select_system(comp,"base") end)
+end
+function window.On.SelectCamera.Clicked(_)
+    handle(function(comp) return Runtime.select_system(comp,"camera") end)
+end
+function window.On.SetMode.Clicked(_)
+    handle(function(comp)
+        local option=tonumber(items.DisplayMode.CurrentIndex)==1 and
+            "Transparent Overlay" or "Full Map"
+        return Runtime.set_display_mode(comp,option)
+    end)
 end
 
 function window.On.Refresh.Clicked(_)
