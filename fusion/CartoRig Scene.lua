@@ -57,6 +57,13 @@ local window = dispatcher:AddWindow({
         ui:Button{ ID = "FocusFound", Text = "Focus" }
     },
     ui:Button{ ID = "SetFlyTarget", Text = "Use Selected City as Fly To Target" },
+    ui:Label{ Text = "CAMERA FIT — EXPLICIT TARGET SELECTION" },
+    ui:HGroup{
+        ui:Button{ ID = "AddFitSelection", Text = "Add Selected Place" },
+        ui:Button{ ID = "ClearFitSelection", Text = "Clear" },
+        ui:Button{ ID = "SetFitTarget", Text = "Set Fit Target" }
+    },
+    ui:Label{ ID = "FitSelectionLabel", Text = "Fit selection: none" },
     ui:Label{ Text = "CREATE ROUTE FROM SELECTED LOCATIONS" },
     ui:HGroup{
         ui:Button{ ID = "UseRouteFrom", Text = "Set Start" },
@@ -126,6 +133,7 @@ local matching = {}
 local catalog = nil
 local geometryIndex = nil
 local routeStart,routeState,routeArrival = nil,nil,nil
+local fitItems,fitComp = {},nil
 local dataIssue = nil
 local selectedObjectId = nil
 local pendingDelete = nil
@@ -182,6 +190,12 @@ local function sync()
     binding = nil
     choices = {}
     items.Objects:Clear()
+    local active=current_comp and current_comp() or nil
+    if active~=fitComp then
+        fitItems={}
+        fitComp=active
+        items.FitSelectionLabel.Text="Fit selection: none"
+    end
     if not current then
         items.Composition.Text = "Composition: none"
         items.State.Text = "NO_COMP — Select a Fusion composition"
@@ -474,6 +488,61 @@ function window.On.CreateRoute.Clicked(_)
              pathType=style,
              name=routeStart.name.." → "..routeArrival.name.." ("..
                  routeState.name..")"})
+    end)
+end
+
+local function show_fit_targets()
+    local names={}
+    for _,entry in ipairs(fitItems) do
+        names[#names+1]=entry.name
+    end
+    items.FitSelectionLabel.Text=#names==0 and "Fit selection: none" or
+        ("Fit selection ("..#names.."): "..table.concat(names,", "))
+end
+
+function window.On.AddFitSelection.Clicked(_)
+    local ok,row=pcall(current_match)
+    if not ok then feedback(label_error(row)) return end
+    local current=current_comp()
+    if not current or current~=binding then
+        feedback("WRONG_CONTEXT: Refresh after switching composition.")
+        return
+    end
+    for _,entry in ipairs(fitItems) do
+        if entry.id==row.id then
+            feedback("FIT_DUPLICATE: Target is already included.")
+            return
+        end
+    end
+    local target={id=row.id,name=row.name,kind=row.kind}
+    if row.point then
+        target.point={lon=row.point.lon,lat=row.point.lat}
+    elseif row.kind=="Country" or row.kind=="State" then
+        local geometry=geometryIndex and geometryIndex:get(row.id)
+        if not geometry then
+            feedback("NO_GEOMETRY: Selected region has no valid polygon")
+            return
+        end
+        target.geometry=geometry
+    else
+        feedback("FIT_TARGET_REQUIRED: Select a City, Country or State")
+        return
+    end
+    fitItems[#fitItems+1]=target
+    show_fit_targets()
+end
+
+function window.On.ClearFitSelection.Clicked(_)
+    fitItems={}
+    show_fit_targets()
+end
+
+function window.On.SetFitTarget.Clicked(_)
+    handle(function(comp)
+        if #fitItems==0 then
+            error("FIT_TARGET_REQUIRED: Add explicit places for Camera Fit",0)
+        end
+        return Runtime.set_fit_target(comp,fitItems,.10)
     end)
 end
 
