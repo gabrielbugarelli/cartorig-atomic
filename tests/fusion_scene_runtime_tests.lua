@@ -127,12 +127,19 @@ for _, tool in ipairs(comp.list) do
 end
 expect_failure(function() runtime.create(comp) end, "ALREADY_EXISTS")
 
-local marker1 = runtime.add_marker(comp, "São Paulo", -46.6333, -23.5505)
+local marker1 = runtime.add_marker(comp, "São Paulo", -46.6333, -23.5505,
+    {id="ne10m:city:12345", kind="City", name="São Paulo",
+     country="Brazil", parent="São Paulo",
+     point={lon=-46.6333,lat=-23.5505}})
 local control1 = find(comp, marker1, "control")
 local merge1 = find(comp, marker1, "merge")
 local mask1 = find(comp, marker1, "mask")
 expect(control1 ~= nil and mask1 ~= nil and merge1 ~= nil,
        "Marker has real Fusion Background, EllipseMask and Merge")
+expect(runtime.inspect(comp).objects[1].sourceRef.featureId=="ne10m:city:12345",
+       "Natural Earth identity survives authored Marker creation")
+expect(runtime.inspect(comp).objects[1].sourceRef.provider=="Natural Earth",
+       "SourceRef carries explicit geographic provenance")
 expect(control1.links.EffectMask == mask1, "Marker is actually masked")
 expect(mask1.inputs.Center[1] > 0 and mask1.inputs.Center[2] > 0,
        "geographic coordinate projected to Fusion normalized space")
@@ -179,6 +186,11 @@ expect(next(labelControl.animations) == nil, "Label not animated by marker")
 local before = #comp.list
 expect_failure(function() runtime.add_marker(comp, "Invalid", 400, 0) end,
                "INVALID_COORDINATES")
+expect_failure(function()
+    runtime.add_marker(comp, "Wrong source", -46.6, -23.5,
+        {id="ne10m:city:12345", kind="City", name="São Paulo",
+         point={lon=-46.6333,lat=-23.5505}})
+end, "SOURCE_MISMATCH")
 expect_failure(function() runtime.add_label(comp, "", 0, 0) end, "INVALID_NAME")
 expect(#comp.list == before, "invalid authoring creates no nodes")
 
