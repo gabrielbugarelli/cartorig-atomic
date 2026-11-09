@@ -407,6 +407,14 @@ expect(regionHoleMask.inputs.PaintMode=="Subtract",
     "inner ring subtracts rather than covering a real geographic lake/hole")
 expect(regionMerge.links.Foreground==regionRender,
     "Region stroke composite is the authored visible layer")
+expect(find(comp,regionId,"highlight_color")~=nil and
+    find(comp,regionId,"stroke_composite")~=nil,
+    "Region has independent optional highlight color and contour composite")
+expect(regionRender.links.Background==find(comp,regionId,"stroke_composite") and
+    regionRender.links.Foreground==find(comp,regionId,"highlight_color"),
+    "Highlight overlays the region with separate Fusion nodes")
+expect(regionRender.inputs.Blend==0,
+    "Region highlight starts at zero strength; no keys are generated")
 expect(regionControl.inputs.TopLeftRed==130/255,
     "Region uses approved neutral grey-blue default rather than editorial highlight")
 expect(runtime.inspect(comp).objects[#runtime.inspect(comp).objects].sourceRef.featureId==
@@ -453,7 +461,7 @@ local regionNodeCount=#comp.list
 runtime.remove(comp,regionId)
 expect(not find(comp,regionId,"control") and not find(comp,regionId,"render"),
     "Deleting Region removes only its fully-owned native rendering graph")
-expect(#comp.list==regionNodeCount-10,
+expect(#comp.list==regionNodeCount-12,
     "Deleting Region removes all fill/stroke polygons, backgrounds and merges")
 expect(find(comp,routeId,"control")==routeControl,
     "Deleting an independent Region does not destroy Route Control")
