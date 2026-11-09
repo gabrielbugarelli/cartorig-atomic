@@ -127,6 +127,62 @@ local function add_color(component,title,defaults,group)
     return controls
 end
 
+-- This action is self-contained in the native Fusion tool. The UIManager
+-- Scene window may be closed: Fusion owns the opacity curve and its keys.
+local layerFadeScript=[==[
+local function apply()
+    local selected=tool
+    if not selected then error("HOST_TOOL: Base Map is not selected") end
+    local host=selected.Comp or (rawget(_G,"fu") and fu.CurrentComp)
+        or rawget(_G,"comp")
+    if not host then error("HOST_COMP: Fusion composition unavailable") end
+    local tag=selected:GetData("CartoRigAtomic.IdentityV2")
+    if type(tag)~="table" or tag.role~="base" then
+        error("OBJECT_ID: Selected tool is not CartoRig Base Map")
+    end
+    if tonumber(selected:GetInput("TransparentOverlay"))==1 then
+        error("UNSUPPORTED_MODE: Layer Fade requires Full Map")
+    end
+    local ids={"OceanOpacity","LandOpacity","BorderOpacity"}
+    local index=tonumber(selected:GetInput("CR2LayerFadeLayer"))
+    local channel=ids[index and index+1 or -1]
+    if not channel then error("LAYER_REQUIRED: Choose an active Base Map layer") end
+    local duration=tonumber(selected:GetInput("CR2LayerFadeDuration"))
+    local now=tonumber(host.CurrentTime)
+    local attrs=host:GetAttrs()
+    if not now or now<0 or now%1~=0 or not duration or duration<1 or
+       duration>10000 or duration%1~=0 then
+        error("INVALID_FRAME: Start/Duration must use positive integer frames")
+    end
+    if not attrs or not tonumber(attrs.COMPN_RenderEnd) or
+       now+duration>tonumber(attrs.COMPN_RenderEnd) then
+        error("FRAME_OUT_OF_RANGE: Layer Fade exceeds the composition")
+    end
+    local port=selected[channel]
+    if not port then error("HOST_CHANNEL: Base layer opacity unavailable") end
+    local ok,existing=pcall(function() return port:GetConnectedOutput() end)
+    if not ok or existing then
+        error("MOTION_CONFLICT: This base layer already contains host keys")
+    end
+    host:StartUndo("CartoRig: MO-MAP-01 Layer Fade")
+    local wrote,issue=pcall(function()
+        if not selected:AddModifier(channel,"BezierSpline") then
+            error("HOST_ANIMATION: Cannot create native layer Spline")
+        end
+        selected:SetInput(channel,0,now)
+        selected:SetInput(channel,1,now+duration)
+        selected:SetData("CartoRigAtomic.MotionLayerFadeV2",{
+            schemaVersion=2,presetId="MO-MAP-01",channel=channel,
+            startFrame=now,endFrame=now+duration,state="ANIMATED_PRESET"
+        })
+    end)
+    host:EndUndo(wrote)
+    if not wrote then error(issue) end
+end
+local ok,why=pcall(apply)
+if not ok then print("CartoRig Motion: "..tostring(why)) end
+]==]
+
 function Create()
     InWater=add_color("Ocean","Ocean Fill",{16/255,40/255,60/255,1},1)
     InLand=add_color("Land","Land Fill",{57/255,76/255,89/255,1},2)
@@ -154,6 +210,23 @@ function Create()
     InOverlay=self:AddInput("Transparent Overlay","TransparentOverlay",{
         LINKID_DataType="Number",INPID_InputControl="CheckboxControl",
         INP_Integer=true,INP_Default=0,ICS_ControlPage="Control",
+    })
+    InMotionLayer=self:AddInput("Layer Fade Target","CR2LayerFadeLayer",{
+        LINKID_DataType="Number",
+        INPID_InputControl="MultiButtonControl",
+        INP_Default=0,INP_Integer=true,ICS_ControlPage="Motion",
+        {MBTNC_AddButton="Ocean",MBTNCID_AddID=0},
+        {MBTNC_AddButton="Land",MBTNCID_AddID=1},
+        {MBTNC_AddButton="Country Borders",MBTNCID_AddID=2},
+    })
+    InMotionDuration=self:AddInput("Duration (Frames)","CR2LayerFadeDuration",{
+        LINKID_DataType="Number",INPID_InputControl="SliderControl",
+        INP_Default=18,INP_Integer=true,INP_MinScale=1,
+        INP_MaxScale=180,ICS_ControlPage="Motion",
+    })
+    InMotionApply=self:AddInput("Apply Layer Fade","CR2LayerFadeApply",{
+        LINKID_DataType="Number",INPID_InputControl="ButtonControl",
+        ICS_ControlPage="Motion",BTNCS_Execute=layerFadeScript,
     })
     OutMap=self:AddOutput("Map RGBA","Output",{
         LINKID_DataType="Image",LINK_Main=1,
