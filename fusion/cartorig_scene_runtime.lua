@@ -772,6 +772,93 @@ if not ok then print("CartoRig Camera Motion: "..tostring(issue)) end
     return (script:gsub("%%%%MODE%%%%",mode))
 end
 
+-- Follow Path writes an actual Curve to Route/Follower Progress.
+-- The Marker position evaluates a host-native Center expression linked to
+-- this channel, so random seeks and renders work with Scene UI closed.
+local function route_follow_callback()
+    return [==[
+local function follow()
+    local route=tool
+    local host=route and (route.Comp or
+        (rawget(_G,"fu") and fu.CurrentComp) or rawget(_G,"comp"))
+    if not host then error("HOST_COMP: Fusion composition unavailable") end
+    local tag=route:GetData("CartoRigAtomic.IdentityV2")
+    if type(tag)~="table" or tag.role~="control" then
+        error("OBJECT_ID: Route Control was not selected")
+    end
+    local scene=host:GetData("CartoRigAtomic.SceneV2")
+    if type(scene)~="table" or scene.sceneId~=tag.sceneId then
+        error("SCENE_CONTEXT: Wrong Fusion composition")
+    end
+    local own
+    for _,obj in ipairs(scene.objects or {}) do
+        if obj.id==tag.objectId then own=obj break end
+    end
+    if not own or own.kind~="Route" or own.locked then
+        error("LOCKED: Select an unlocked CartoRig Route")
+    end
+    local link=route:GetData("CartoRigAtomic.RouteFollowerV2")
+    if type(link)~="table" or not link.markerId or
+       link.routeId~=tag.objectId or
+       own.followerMarkerId~=link.markerId then
+        error("FOLLOWER_REQUIRED: Link an existing Marker in Scene first")
+    end
+    local marker
+    for _,obj in ipairs(scene.objects or {}) do
+        if obj.id==link.markerId then marker=obj break end
+    end
+    if not marker or marker.kind~="Marker" or marker.locked or
+       marker.followingRouteId~=tag.objectId then
+        error("FOLLOWER_CONFLICT: Linked Marker is missing or locked")
+    end
+    local channel=route.CR2FollowerProgress
+    if not channel then
+        error("HOST_CHANNEL: Route has no native Follower Progress")
+    end
+    local inspected,connected=pcall(function()
+        return channel:GetConnectedOutput()
+    end)
+    if not inspected or connected then
+        error("MOTION_CONFLICT: Follower Progress already contains keys")
+    end
+    local exprOk,expression=pcall(function()
+        return channel:GetExpression()
+    end)
+    if exprOk and expression and expression~="" then
+        error("MOTION_CONFLICT: Follower Progress has a custom expression")
+    end
+    local duration=tonumber(route:GetInput("CR2FollowDuration"))
+    local start=tonumber(host.CurrentTime)
+    local attrs=host:GetAttrs()
+    if not duration or duration%1~=0 or duration<1 or
+       duration>10000 or not start or start%1~=0 or start<0 or
+       not attrs or not tonumber(attrs.COMPN_RenderEnd) or
+       start+duration>tonumber(attrs.COMPN_RenderEnd) then
+        error("FRAME_OUT_OF_RANGE: Follower motion exceeds Fusion composition")
+    end
+    host:StartUndo("CartoRig: MO-RTE-03 Follow Path")
+    local ok,problem=pcall(function()
+        if not route:AddModifier("CR2FollowerProgress","BezierSpline") then
+            error("HOST_ANIMATION: Cannot animate native Follower Progress")
+        end
+        route:SetInput("CR2FollowerProgress",0,start)
+        route:SetInput("CR2FollowerProgress",1,start+duration)
+        route:SetData("CartoRigAtomic.MotionFollowerV2",{
+            schemaVersion=2,presetId="MO-RTE-03",
+            channel="Follower Progress",
+            markerId=link.markerId,startFrame=start,
+            endFrame=start+duration,visibility="Independent",
+            state="ANIMATED_PRESET"
+        })
+    end)
+    host:EndUndo(ok)
+    if not ok then error(problem) end
+end
+local ok,problem=pcall(follow)
+if not ok then print("CartoRig Follow Path: "..tostring(problem)) end
+]==]
+end
+
 local function attach_inspector_motion(tool, kind)
     if kind~="Marker" and kind~="Label" and kind~="Camera" and
         kind~="Region" and kind~="Route" then
@@ -897,6 +984,18 @@ local function attach_inspector_motion(tool, kind)
             LINKID_DataType="Number",INPID_InputControl="SliderControl",
             ICS_ControlPage="Control",INP_Default=0,
             INP_MinScale=0,INP_MaxScale=1,INP_External=false
+        }
+        controls.CR2FollowDuration={
+            LINKS_Name="Follow Path Duration (Frames)",
+            LINKID_DataType="Number",INPID_InputControl="SliderControl",
+            ICS_ControlPage="Motion",INP_Integer=true,INP_Default=60,
+            INP_MinScale=1,INP_MaxScale=300,INP_External=false
+        }
+        controls.CR2MotionFollow={
+            LINKS_Name="Apply MO-RTE-03 Follow Path",
+            LINKID_DataType="Number",INPID_InputControl="ButtonControl",
+            ICS_ControlPage="Motion",INP_External=false,
+            BTNCS_Execute=route_follow_callback()
         }
         controls.CR2MotionErase={
             LINKS_Name="Apply MO-RTE-02 Erase Path",
