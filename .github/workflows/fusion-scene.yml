@@ -40,18 +40,22 @@ jobs:
           luac5.4 -p fusion/cartorig_catalog.lua
           luac5.4 -p fusion/cartorig_motion.lua
           luac5.4 -p fusion/cartorig_geometry.lua
+          luac5.4 -p fusion/fuses/CartoRigAtomicLand.fuse
           lua5.4 tests/fusion_scene_runtime_tests.lua
           lua5.4 tests/fusion_catalog_tests.lua
           lua5.4 tests/fusion_motion_tests.lua
           lua5.4 tests/fusion_geometry_tests.lua
+          lua5.4 tests/fusion_base_fuse_tests.lua
           luac5.1 -p fusion/cartorig_scene_runtime.lua
           luac5.1 -p fusion/cartorig_catalog.lua
           luac5.1 -p fusion/cartorig_motion.lua
           luac5.1 -p fusion/cartorig_geometry.lua
+          luac5.1 -p fusion/fuses/CartoRigAtomicLand.fuse
           lua5.1 tests/fusion_scene_runtime_tests.lua
           lua5.1 tests/fusion_catalog_tests.lua
           lua5.1 tests/fusion_motion_tests.lua
           lua5.1 tests/fusion_geometry_tests.lua
+          lua5.1 tests/fusion_base_fuse_tests.lua
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -93,6 +97,7 @@ jobs:
           sudo apt-get update -qq && sudo apt-get install -y lua5.4
           lua5.4 tests/fusion_real_catalog.lua dist/CartoRigAtomic_Data/places.tsv
           lua5.4 tests/fusion_real_geometry.lua dist/CartoRigAtomic_Data/geometry.tsv
+          CARTORIG_ATOMIC_DATA_DIR=dist/CartoRigAtomic_Data lua5.4 tests/fusion_base_fuse_tests.lua
       - name: Preserve source provenance and offline data as packaging artifact
         uses: actions/upload-artifact@v4
         with:
