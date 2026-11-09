@@ -1011,6 +1011,9 @@ expect(mask1.inputs.Center[1]==beforeFollowCenter[1] and
        "Unlink restores the authored Marker WGS84 anchor")
 expect(followRoute.animations.CR2FollowerProgress[160]==1,
        "Unlink preserves customized timeline progress as manual animation")
+expect(followRoute:GetData("CartoRigAtomic.MotionFollowerV2").state==
+       "KEPT_AS_MANUAL",
+       "Unlinked follower retains native keys explicitly labelled manual")
 expect(runtime.inspect(comp).objects[1].followingRouteId==nil,
        "scene no longer contains a stale follower marker reference")
 
