@@ -684,6 +684,10 @@ expect(changedFillControl.splineKeyframes.TopLeftRed[360].Flags.Linear==true,
        "Region Color Transition writes genuine native Linear interpolation")
 expect(changedFillControl.animations.TopLeftAlpha[384]==1,
        "Color Transition preserves independent Fill Alpha")
+local regionBindings=changedFillControl:GetData("CartoRigAtomic.MotionBindingsV2")
+expect(regionBindings["Object Opacity"].presetId=="MO-REG-02" and
+       regionBindings["Fill Color"].presetId=="MO-REG-03",
+       "per-channel Motion binding registry preserves simultaneous Opacity and Fill presets")
 expect(fadeRegionMerge.animations.Blend[334]==0,
        "Region Fill Color animation does not overwrite an existing Opacity Fade")
 local instantId=runtime.add_region(comp,state,statePolygon)
