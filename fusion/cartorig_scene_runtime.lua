@@ -676,17 +676,42 @@ local function route_vertices(origin,destination,style,curvature)
     local curve=(style=="Curved") and curvature or 0
     local controlX=(x1+x2)/2-dy*curve
     local controlY=(y1+y2)/2+dx*curve
-    local vertices={}
+    local unwrapped={}
     local steps=style=="Straight" and 1 or 32
     for i=0,steps do
         local t=i/steps
-        local x=(1-t)*(1-t)*x1+2*(1-t)*t*controlX+t*t*x2
-        local y=(1-t)*(1-t)*y1+2*(1-t)*t*controlY+t*t*y2
-        while x>180 do x=x-360 end
-        while x< -180 do x=x+360 end
-        vertices[#vertices+1]={lon=x,lat=y}
+        unwrapped[#unwrapped+1]={
+            lon=(1-t)*(1-t)*x1+2*(1-t)*t*controlX+t*t*x2,
+            lat=(1-t)*(1-t)*y1+2*(1-t)*t*controlY+t*t*y2
+        }
     end
-    return vertices
+    -- Split the line precisely on +/-180; a 179->-179 route must never
+    -- produce a 358-degree diagonal across the world canvas.
+    local segments={{unwrapped[1]}}
+    for i=2,#unwrapped do
+        local previous=unwrapped[i-1]
+        local current=unwrapped[i]
+        local seam=(previous.lon<=180 and current.lon>180) and 180 or
+                   (previous.lon>= -180 and current.lon< -180) and -180 or nil
+        if seam then
+            local fraction=(seam-previous.lon)/(current.lon-previous.lon)
+            local latitude=previous.lat+fraction*(current.lat-previous.lat)
+            segments[#segments][#segments[#segments]+1]={lon=seam,lat=latitude}
+            local shift=seam==180 and -360 or 360
+            local another={{lon=seam+shift,lat=latitude}}
+            for j=i,#unwrapped do
+                unwrapped[j].lon=unwrapped[j].lon+shift
+            end
+            segments[#segments+1]=another
+            current=unwrapped[i]
+        end
+        segments[#segments][#segments[#segments]+1]=current
+    end
+    for _,segment in ipairs(segments) do
+        if #segment<2 then fail("GEOMETRY_FORMAT","Degenerate antimeridian segment") end
+        for _,v in ipairs(segment) do validate_position(v.lon,v.lat) end
+    end
+    return segments
 end
 
 function M.add_route(comp,origin,arrival,details)
@@ -703,7 +728,7 @@ function M.add_route(comp,origin,arrival,details)
         end
     end
     local style=details.pathType or "Straight"
-    local vertices=route_vertices(
+    local segments=route_vertices(
         {lon=ox,lat=oy},{lon=tx,lat=ty},style,details.curvature)
     local name=safe_name(details.name or
         ((origin.name or "Origin").." → "..(arrival.name or "Destination")))
@@ -715,14 +740,20 @@ function M.add_route(comp,origin,arrival,details)
         local source=add_tool(comp,"Background","CR2_Route_"..n,
             -3,n*2,scene.sceneId,id,"control")
         set_background_rgb(source,214/255,223/255,230/255)
-        local mask=make_mask(comp,scene,id,n,vertices,false,3/1920,"Add")
-        checked_link(source,"EffectMask",mask)
+        local previousMask
+        for i,segment in ipairs(segments) do
+            local mask=make_mask(comp,scene,id,n*100+i,segment,false,3/1920,"Add")
+            if previousMask then checked_link(mask,"EffectMask",previousMask) end
+            previousMask=mask
+        end
+        checked_link(source,"EffectMask",previousMask)
         add_composite(comp,scene,id,source,n)
         scene.objects[#scene.objects+1]={
             id=id,kind="Route",name=name,visible=true,locked=false,
             route={ from={lon=ox,lat=oy,sourceId=origin.id},
                     to={lon=tx,lat=ty,sourceId=arrival.id},
                     pathType=style,curvature=details.curvature or .2,
+                    segments=#segments,
                     destinationStateId=details.destinationState and
                         details.destinationState.id or nil },
         }
