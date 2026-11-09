@@ -1,0 +1,365 @@
+{
+  "contract": "CR-PS-2.0",
+  "schema": "cartorig-qa-evidence-v1",
+  "generated_utc": "2026-11-09",
+  "evidence_note": "Unit tests and synthetic Fuse/Fusion mocks are NOT host acceptance.",
+  "host_version": "NOT_OBSERVED",
+  "target": "DaVinci Resolve Studio 20 / Windows",
+  "automated_ci_run": "https://github.com/gabrielbugarelli/cartorig-atomic/actions/runs/42581808753",
+  "host": {
+    "HOST-01": {
+      "status": "NOT_TESTED",
+      "host_evidence": null
+    },
+    "HOST-02": {
+      "status": "NOT_TESTED",
+      "host_evidence": null
+    },
+    "HOST-03": {
+      "status": "NOT_TESTED",
+      "host_evidence": null
+    },
+    "HOST-04": {
+      "status": "NOT_TESTED",
+      "host_evidence": null
+    },
+    "HOST-05": {
+      "status": "NOT_TESTED",
+      "host_evidence": null
+    },
+    "HOST-06": {
+      "status": "NOT_TESTED",
+      "host_evidence": null
+    },
+    "HOST-07": {
+      "status": "NOT_TESTED",
+      "host_evidence": null
+    },
+    "HOST-08": {
+      "status": "NOT_TESTED",
+      "host_evidence": null
+    },
+    "HOST-09": {
+      "status": "NOT_TESTED",
+      "host_evidence": null
+    },
+    "HOST-10": {
+      "status": "NOT_TESTED",
+      "host_evidence": null
+    }
+  },
+  "qa": {
+    "QA-01": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-02": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-03": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-04": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-05": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-06": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-07": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-08": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-09": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-10": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-11": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-12": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-13": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-14": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-15": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-16": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-17": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-18": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-19": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-20": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-21": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-22": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-23": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-24": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-25": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-26": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-27": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-28": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-29": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-30": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-31": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-32": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-33": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-34": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-35": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-36": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-37": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-38": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-39": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-40": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-41": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-42": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-43": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-44": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-45": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-46": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-47": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-48": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-49": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-50": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-51": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-52": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-53": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-54": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-55": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-56": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-57": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-58": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-59": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    },
+    "QA-60": {
+      "status": "NOT_TESTED_IN_RESOLVE",
+      "host_evidence": null
+    }
+  },
+  "features": {
+    "OBJ-MAP": {
+      "status": "IMPLEMENTED_UNVERIFIED_IN_HOST"
+    },
+    "OBJ-REG": {
+      "status": "IMPLEMENTED_UNVERIFIED_IN_HOST"
+    },
+    "OBJ-RTE": {
+      "status": "IMPLEMENTED_UNVERIFIED_IN_HOST"
+    },
+    "OBJ-MRK": {
+      "status": "PARTIAL"
+    },
+    "OBJ-CAM": {
+      "status": "PARTIAL"
+    },
+    "OBJ-LBL": {
+      "status": "PARTIAL"
+    },
+    "OBJ-GRP": {
+      "status": "PARTIAL"
+    },
+    "MO-REG-01": {
+      "status": "NATIVE_KEYS_UNVERIFIED_IN_HOST"
+    },
+    "MO-REG-02": {
+      "status": "PLANNED_NOT_APPLIED"
+    },
+    "MO-REG-03": {
+      "status": "PLANNED_NOT_APPLIED"
+    },
+    "MO-REG-04": {
+      "status": "PLANNED_NOT_APPLIED"
+    },
+    "MO-REG-05": {
+      "status": "PLANNED_NOT_APPLIED"
+    },
+    "MO-REG-06": {
+      "status": "PLANNED_NOT_APPLIED"
+    },
+    "MO-RTE-01": {
+      "status": "NATIVE_KEYS_UNVERIFIED_IN_HOST"
+    },
+    "MO-RTE-02": {
+      "status": "PLANNED_NOT_APPLIED"
+    },
+    "MO-RTE-03": {
+      "status": "PLANNED_NOT_APPLIED"
+    },
+    "MO-MRK-01": {
+      "status": "NATIVE_KEYS_UNVERIFIED_IN_HOST"
+    },
+    "MO-MRK-02": {
+      "status": "PLANNED_NOT_APPLIED"
+    },
+    "MO-CAM-01": {
+      "status": "PLANNED_NOT_APPLIED"
+    },
+    "MO-CAM-02": {
+      "status": "NATIVE_KEYS_UNVERIFIED_IN_HOST"
+    },
+    "MO-CAM-03": {
+      "status": "PLANNED_NOT_APPLIED"
+    },
+    "MO-LBL-01": {
+      "status": "NATIVE_KEYS_UNVERIFIED_IN_HOST"
+    },
+    "MO-MAP-01": {
+      "status": "PLANNED_NOT_APPLIED"
+    }
+  },
+  "release_1_0_approved": false
+}
