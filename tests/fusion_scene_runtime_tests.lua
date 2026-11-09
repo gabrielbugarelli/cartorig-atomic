@@ -112,6 +112,7 @@ local function new_comp()
         t.Center = port("Center")
         t.CR2CameraLongitude = port("CR2CameraLongitude")
         t.CR2CameraLatitude = port("CR2CameraLatitude")
+        t.CR2FollowerProgress = port("CR2FollowerProgress")
         t.WriteLength = port("WriteLength")
         t.Width = port("Width")
         t.Height = port("Height")
@@ -942,5 +943,75 @@ expect(fitCamera.animations.Size[145]==targetPose.zoom,
        "re-applying Fit Transition refuses to overwrite native Spline curves")
 _G.tool,_G.comp=savedFitTool,savedFitComp
 
+
+
+-- Route Follow Path uses route-space cumulative lengths and one native
+-- Progress curve while the Marker position is driven by a persistent Fusion
+-- expression. No marker is created implicitly and its original anchor stays
+-- recoverable if the follower is explicitly unlinked.
+local followRoute=find(comp,routeId,"control")
+local followSamples=followRoute:GetData("CartoRigAtomic.RoutePolylineV2")
+local p0=runtime.route_point_at(followSamples,0)
+local p25=runtime.route_point_at(followSamples,.25)
+local p50=runtime.route_point_at(followSamples,.5)
+local p75=runtime.route_point_at(followSamples,.75)
+local p100=runtime.route_point_at(followSamples,1)
+expect(math.abs(p0.lon-origin.lon)<1e-10 and
+       math.abs(p0.lat-origin.lat)<1e-10,
+       "Follow Path 0% corresponds to explicitly chosen origin")
+expect(math.abs(p100.lon-arrival.lon)<1e-10 and
+       math.abs(p100.lat-arrival.lat)<1e-10,
+       "Follow Path 100% corresponds to explicitly chosen destination")
+expect(p25.lat>p0.lat and p50.lat>p25.lat and
+       p75.lat>p50.lat and p100.lat>p75.lat,
+       "0/25/50/75/100% follower samples move monotonically along route")
+expect_failure(function()
+    runtime.route_point_at(followSamples,1.5)
+end,"INVALID_PROGRESS")
+local beforeFollowCenter={mask1.inputs.Center[1],mask1.inputs.Center[2]}
+expect(runtime.link_follower(comp,routeId,marker1)==true,
+       "Link follower chooses existing authored Marker explicitly")
+expect(mask1.expressions.Center:find("CR2FollowerProgress",1,true)~=nil,
+       "Marker Center reacts to the Route's native Follower Progress")
+expect(mask1:GetData("CartoRigAtomic.FollowerLinkV2").routeId==routeId,
+       "Follower preserves the original anchor and its source Route ID")
+expect(followRoute:GetData("CartoRigAtomic.RouteFollowerV2").markerId==marker1,
+       "Route stores explicit existing follower identity")
+expect_failure(function()runtime.link_follower(comp,antimeridianId,marker1)end,
+       "FOLLOWER_CONFLICT")
+expect_failure(function()runtime.remove(comp,marker1)end,
+       "FOLLOWER_LINK_ACTIVE")
+expect_failure(function()runtime.remove(comp,routeId)end,
+       "FOLLOWER_LINK_ACTIVE")
+comp.CurrentTime=100
+followRoute.inputs.CR2FollowDuration=60
+local savedFollowTool,savedFollowComp=_G.tool,_G.comp
+_G.tool,_G.comp=followRoute,comp
+local followApply=assert((loadstring or load)(
+    followRoute.UserControls.CR2MotionFollow.BTNCS_Execute))
+followApply()
+expect(followRoute.animations.CR2FollowerProgress[100]==0 and
+       followRoute.animations.CR2FollowerProgress[160]==1,
+       "Route Follow Path creates native Spline progress 0 to 1 in 60 frames")
+expect(followRoute:GetData("CartoRigAtomic.MotionFollowerV2").presetId==
+       "MO-RTE-03","route owns separate persistent native Motion identity")
+expect(mask1.animations.Width[268]==14/1920 and
+       merge1.animations.Blend[124]==1,
+       "Follower Progress never modifies Marker Size or Fade In")
+followApply()
+expect(followRoute.animations.CR2FollowerProgress[160]==1,
+       "Follower Progress conflict preserves existing Spline")
+_G.tool,_G.comp=savedFollowTool,savedFollowComp
+expect(runtime.unlink_follower(comp,routeId)==true,
+       "Unlink follower is an explicit independent Undo action")
+expect(mask1.expressions.Center==nil,
+       "Unlink removes only the generated native Center expression")
+expect(mask1.inputs.Center[1]==beforeFollowCenter[1] and
+       mask1.inputs.Center[2]==beforeFollowCenter[2],
+       "Unlink restores the authored Marker WGS84 anchor")
+expect(followRoute.animations.CR2FollowerProgress[160]==1,
+       "Unlink preserves customized timeline progress as manual animation")
+expect(runtime.inspect(comp).objects[1].followingRouteId==nil,
+       "scene no longer contains a stale follower marker reference")
 
 print("PASS: " .. checks .. " original Fusion graph / Control / Motion assertions")
