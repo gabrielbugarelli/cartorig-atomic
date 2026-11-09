@@ -360,6 +360,7 @@ function M.inspect(comp)
     end
     return { state = #objects == 0 and "SCENE_EMPTY" or "SCENE_READY",
         sceneId = scene.sceneId, objects = objects,
+        displayMode = scene.displayMode,
         groups = copy_table(scene.groups or {}) }
 end
 
@@ -378,14 +379,14 @@ function M.create(comp)
             projection = "Equirectangular",
             displayMode = "Full Map"
         }
-        local background = add_tool(comp, "Background", "CR2_Base_Map", -5, 0,
-            sceneId, sceneId, "base")
-        -- Neutral background ONLY: real terrestrial geometry is added by
-        -- the geographic renderer. Never claim that flat color is a map.
-        background:SetInput("TopLeftRed", 0.063)
-        background:SetInput("TopLeftGreen", 0.157)
-        background:SetInput("TopLeftBlue", 0.235)
-        background:SetInput("TopLeftAlpha", 1.0)
+        -- This is a real Fusion-native rasterizer of *vector* Natural Earth
+        -- geometries, not a flat color or 8K PNG. The separate Fuse is shipped
+        -- with the Windows installer and runs while Scene UIManager is closed.
+        local background = add_tool(comp,"Fuse.CartoRigAtomicLand",
+            "CR2_Base_Map",-5,0,sceneId,sceneId,"base")
+        if background:SetInput("TransparentOverlay",0)==false then
+            fail("HOST_BASE_MAP","Fusion vector map controls are unavailable")
+        end
 
         local camera = add_tool(comp, "Transform", "CR2_Camera", 5, 0,
             sceneId, scene.cameraId, "camera")
@@ -481,6 +482,36 @@ local function add_object(comp, kind, name, lon, lat, source)
         }
         comp:SetData(SCENE_KEY, scene)
         return id
+    end)
+end
+
+function M.select_system(comp, role)
+    if role~="base" and role~="camera" then
+        fail("INVALID_SELECTION","Only Base Map and Camera are system objects")
+    end
+    local scene=require_scene(comp)
+    local base,camera=validate_graph(comp,scene)
+    local tool=(role=="base") and base or camera
+    local flow=comp.CurrentFrame and comp.CurrentFrame.FlowView
+    if flow and flow.Select then flow:Select() flow:Select(tool,true) end
+    comp:SetActiveTool(tool)
+    return tool
+end
+
+function M.set_display_mode(comp,mode)
+    if mode~="Full Map" and mode~="Transparent Overlay" then
+        fail("INVALID_MODE","Use Full Map or Transparent Overlay")
+    end
+    local scene=require_scene(comp)
+    local base=validate_graph(comp,scene)
+    return undo(comp,"CartoRig: Display Mode",function()
+        if base:SetInput("TransparentOverlay",
+           mode=="Transparent Overlay" and 1 or 0)==false then
+            fail("HOST_BASE_MAP","Fusion refused the native base opacity mode")
+        end
+        scene.displayMode=mode
+        comp:SetData(SCENE_KEY,scene)
+        return mode
     end)
 end
 
