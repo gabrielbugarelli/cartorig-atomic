@@ -28,6 +28,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
 Source: "..\dist\CartoRig Scene.lua"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\fusion\fuses\CartoRigAtomicLand.fuse"; DestDir: "{userappdata}\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses"; Flags: ignoreversion
 Source: "..\dist\CartoRigAtomic_Data\places.tsv"; DestDir: "{app}\CartoRigAtomic_Data"; Flags: ignoreversion
 Source: "..\dist\CartoRigAtomic_Data\cartorig-data-manifest.json"; DestDir: "{app}\CartoRigAtomic_Data"; Flags: ignoreversion
 Source: "..\dist\CartoRigAtomic_Data\geometry.tsv"; DestDir: "{app}\CartoRigAtomic_Data"; Flags: ignoreversion
