@@ -1731,6 +1731,28 @@ function M.focus(comp, lon, lat, zoom)
     end)
 end
 
+
+function M.set_zoom(comp, zoom)
+    zoom=tonumber(zoom)
+    if not zoom or zoom~=zoom or zoom<.25 or zoom>100 then
+        fail("INVALID_ZOOM","Camera Zoom must be 0.25..100")
+    end
+    local scene=require_scene(comp)
+    local _,camera=validate_graph(comp,scene)
+    if not camera.Size then fail("HOST_CAMERA","Zoom control is missing") end
+    local ok,connected=pcall(function()
+        return camera.Size:GetConnectedOutput()
+    end)
+    if not ok then fail("HOST_CAMERA","Cannot inspect Zoom animation") end
+    if connected then
+        fail("MOTION_CONFLICT","Zoom already contains keys; use Fusion Spline")
+    end
+    return undo(comp,"CartoRig: Set Zoom",function()
+        camera:SetInput("Size",zoom)
+        return true
+    end)
+end
+
 function M.fade_in(comp, objectId, firstFrame, duration)
     firstFrame = tonumber(firstFrame)
     duration = tonumber(duration)
