@@ -93,7 +93,9 @@ local function cartorig_apply()
         identity.role ~= "camera" then
         error("OBJECT_ID: selected tool is not an authored CartoRig object")
     end
-    local kind = "%%KIND%%"
+    local requestedKind = "%%KIND%%"
+    local kind = requestedKind == "RegionFadeOut" and "Region" or
+        requestedKind == "RouteErase" and "Route" or requestedKind
     local scene=host:GetData("CartoRigAtomic.SceneV2")
     if type(scene)~="table" or scene.sceneId~=identity.sceneId then
         error("SCENE_CONTEXT: Authored scene does not match selected Fusion tool")
@@ -138,7 +140,7 @@ local function cartorig_apply()
         propertyName="Size"
         preset="MO-CAM-02"
     elseif kind=="Route" then
-        preset="MO-RTE-01"
+        preset=requestedKind=="RouteErase" and "MO-RTE-02" or "MO-RTE-01"
         propertyName="WriteLength"
         local segments=selected:GetData("CartoRigAtomic.RouteSegmentsV2")
         if type(segments)~="table" or #segments<1 then
@@ -175,7 +177,8 @@ local function cartorig_apply()
         actor=routeActors[1].tool
     else
         preset=kind=="Marker" and "MO-MRK-01" or
-               kind=="Region" and "MO-REG-01" or "MO-LBL-01"
+               kind=="Region" and (requestedKind=="RegionFadeOut" and
+                   "MO-REG-02" or "MO-REG-01") or "MO-LBL-01"
         propertyName="Blend"
         for _,candidate in pairs(host:GetToolList(false) or {}) do
             local ok, tag=pcall(function()
@@ -207,12 +210,12 @@ local function cartorig_apply()
         end
         startValue=current
     elseif kind=="Route" then
-        startValue=0
-        target=1
+        startValue=requestedKind=="RouteErase" and 1 or 0
+        target=1-startValue
     else
         if current<=0 then error("TARGET_REQUIRED: opacity must be positive") end
-        startValue=0
-        target=current
+        startValue=requestedKind=="RegionFadeOut" and current or 0
+        target=requestedKind=="RegionFadeOut" and 0 or current
     end
     host:StartUndo("CartoRig: "..preset)
     local applied, reason=pcall(function()
@@ -221,7 +224,9 @@ local function cartorig_apply()
             for _,part in ipairs(routeActors) do total=total+part.length end
             if total<=0 then error("GEOMETRY_FORMAT: Empty route path") end
             local consumed=0
-            for _,part in ipairs(routeActors) do
+            local reversing=requestedKind=="RouteErase"
+            for index=1,#routeActors do
+                local part=routeActors[reversing and (#routeActors-index+1) or index]
                 local first=now+math.floor(duration*(consumed/total)+.5)
                 consumed=consumed+part.length
                 local lastFrame=now+math.floor(duration*(consumed/total)+.5)
@@ -231,11 +236,15 @@ local function cartorig_apply()
                 if not part.tool:AddModifier("WriteLength","BezierSpline") then
                     error("HOST_ANIMATION: Fusion rejected Route progress Spline")
                 end
-                part.tool:SetInput("WriteLength",0,now)
-                if first>now then part.tool:SetInput("WriteLength",0,first) end
-                part.tool:SetInput("WriteLength",1,lastFrame)
+                local beginning=reversing and 1 or 0
+                local ending=1-beginning
+                part.tool:SetInput("WriteLength",beginning,now)
+                if first>now then
+                    part.tool:SetInput("WriteLength",beginning,first)
+                end
+                part.tool:SetInput("WriteLength",ending,lastFrame)
                 if lastFrame<now+duration then
-                    part.tool:SetInput("WriteLength",1,now+duration)
+                    part.tool:SetInput("WriteLength",ending,now+duration)
                 end
             end
         else
@@ -286,6 +295,21 @@ local function attach_inspector_motion(tool, kind)
             BTNCS_Execute=inspector_motion_callback(kind)
         }
     }
+    if kind=="Region" then
+        controls.CR2MotionFadeOut={
+            LINKS_Name="Apply MO-REG-02 Fade Out",
+            LINKID_DataType="Number",INPID_InputControl="ButtonControl",
+            ICS_ControlPage="Motion",INP_External=false,
+            BTNCS_Execute=inspector_motion_callback("RegionFadeOut")
+        }
+    elseif kind=="Route" then
+        controls.CR2MotionErase={
+            LINKS_Name="Apply MO-RTE-02 Erase Path",
+            LINKID_DataType="Number",INPID_InputControl="ButtonControl",
+            ICS_ControlPage="Motion",INP_External=false,
+            BTNCS_Execute=inspector_motion_callback("RouteErase")
+        }
+    end
     if kind=="Camera" then
         controls.CR2TargetZoom={
             LINKS_Name="Target Zoom", LINKID_DataType="Number",
