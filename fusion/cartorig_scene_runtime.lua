@@ -799,6 +799,21 @@ local function attach_inspector_motion(tool, kind)
         }
     end
     if kind=="Camera" then
+        -- Longitude/Latitude are independent native Number channels.
+        -- Center is an expression of geo pose and Zoom, evaluated by
+        -- Fusion at every requested frame, never by UIManager playback.
+        controls.CR2CameraLongitude={
+            LINKS_Name="Center Longitude (°)",
+            LINKID_DataType="Number",INPID_InputControl="SliderControl",
+            ICS_ControlPage="Control",INP_Default=0,
+            INP_MinScale=-180,INP_MaxScale=180,INP_External=false
+        }
+        controls.CR2CameraLatitude={
+            LINKS_Name="Center Latitude (°)",
+            LINKID_DataType="Number",INPID_InputControl="SliderControl",
+            ICS_ControlPage="Control",INP_Default=0,
+            INP_MinScale=-90,INP_MaxScale=90,INP_External=false
+        }
         controls.CR2TargetZoom={
             LINKS_Name="Target Zoom", LINKID_DataType="Number",
             INPID_InputControl="SliderControl",ICS_ControlPage="Motion",
@@ -994,8 +1009,18 @@ function M.create(comp)
         local camera = add_tool(comp, "Transform", "CR2_Camera", 5, 0,
             sceneId, scene.cameraId, "camera")
         attach_inspector_motion(camera, "Camera")
-        camera:SetInput("Center", point(0.5, 0.5))
+        camera:SetInput("CR2CameraLongitude",0)
+        camera:SetInput("CR2CameraLatitude",0)
         camera:SetInput("Size", 1.0)
+        -- SetExpression is documented for native Fusion PlainInput.
+        -- Keep all animation on scalar host inputs; the Point expression
+        -- re-evaluates the shared map-camera transform on random seeks.
+        local centerFormula="Point(0.5+(0.5-(CR2CameraLongitude+180)/360)*Size,"..
+            "0.5+(0.5-(CR2CameraLatitude+90)/180)*Size)"
+        if not camera.Center or
+           camera.Center:SetExpression(centerFormula)==false then
+            fail("HOST_CAMERA","Native Center expression is unavailable")
+        end
         checked_link(camera, "Input", background)
 
         if not output then
