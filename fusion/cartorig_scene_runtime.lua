@@ -23,6 +23,49 @@ local function object_tool(comp, scene, identity, role)
     return nil
 end
 
+
+local function graph_input(tool, inputName)
+    local port = tool[inputName]
+    if not port then return nil end
+    local ok, upstream = pcall(function() return port:GetConnectedOutput() end)
+    if not ok then
+        fail("HOST_GRAPH", "Unable to inspect Fusion input " .. inputName)
+    end
+    if upstream and type(upstream.GetTool) == "function" then
+        local got, owner = pcall(function() return upstream:GetTool() end)
+        if got and owner then return owner end
+    end
+    return upstream
+end
+
+local function equal_tool(a, b)
+    if a == b then return true end
+    if not a or not b then return false end
+    local aAttrs, bAttrs
+    local okA = pcall(function() aAttrs = a:GetAttrs() end)
+    local okB = pcall(function() bAttrs = b:GetAttrs() end)
+    if okA and okB and type(aAttrs) == "table" and type(bAttrs) == "table" and
+        aAttrs.TOOLS_RegID and bAttrs.TOOLS_RegID then
+        return aAttrs.TOOLS_RegID == bAttrs.TOOLS_RegID and
+            aAttrs.TOOLB_GUID ~= nil and aAttrs.TOOLB_GUID == bAttrs.TOOLB_GUID
+    end
+    return false
+end
+
+local function copy_table(value)
+    if type(value) ~= "table" then return value end
+    local out = {}
+    for k, v in pairs(value) do out[k] = copy_table(v) end
+    return out
+end
+
+local function object_index(scene, id)
+    for i, obj in ipairs(scene.objects) do
+        if obj.id == id then return i, obj end
+    end
+    fail("OBJECT_MISSING", "The selected object no longer belongs to this Scene")
+end
+
 local function tagged(tool, sceneId, objectId, role)
     tool:SetData(TOOL_KEY, {
         schema = VERSION, sceneId = sceneId,
@@ -116,6 +159,22 @@ local function validate_graph(comp, scene)
             not object_tool(comp, scene, obj.id, "merge") then
             fail("SCENE_BROKEN", "Missing Fusion tool for " .. obj.name)
         end
+    end
+    local expected = tail
+    if not equal_tool(graph_input(camera, "Input"), expected) then
+        fail("SCENE_BROKEN", "Camera input was externally changed. No modifications made")
+    end
+    local previous = base
+    for _, obj in ipairs(scene.objects) do
+        local merge = object_tool(comp, scene, obj.id, "merge")
+        if not equal_tool(graph_input(merge, "Background"), previous) then
+            fail("SCENE_BROKEN", "Object draw stack was externally modified")
+        end
+        if not equal_tool(graph_input(merge, "Foreground"),
+            object_tool(comp, scene, obj.id, "control")) then
+            fail("SCENE_BROKEN", "Object foreground link was externally modified")
+        end
+        previous = merge
     end
     return base, camera, tail
 end
