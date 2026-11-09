@@ -1843,7 +1843,7 @@ function M.set_fly_target(comp,feature,zoom)
             name=tostring(feature.name or ""),country=tostring(feature.country or ""),
             longitude=lon,latitude=lat,zoom=zoom
         })
-        return feature.id
+        return true
     end)
 end
 
