@@ -92,7 +92,21 @@ local function new_comp()
             local p={}
             function p:GetConnectedOutput()
                 if (t.modifiers or {})[name] then
-                    return { GetTool = function() return { ID = "BezierSpline" } end }
+                    local spline={ID="BezierSpline"}
+                    function spline:SetKeyFrames(frames,replace)
+                        if replace~=true then return false end
+                        t.splineKeyframes=t.splineKeyframes or {}
+                        t.splineKeyframes[name]=frames
+                        t.animations[name]={}
+                        for frame,description in pairs(frames) do
+                            t.animations[name][frame]=description[1]
+                        end
+                        return true
+                    end
+                    function spline:GetKeyFrames()
+                        return (t.splineKeyframes or {})[name] or {}
+                    end
+                    return { GetTool = function() return spline end }
                 end
                 return t.links[name]
             end
@@ -661,6 +675,8 @@ expect(changedFillControl.animations.TopLeftRed[360]==130/255 and
 expect(changedFillControl.animations.TopLeftGreen[360]==150/255 and
        changedFillControl.animations.TopLeftGreen[384]==1,
        "Green component retains correct source and target frames")
+expect(changedFillControl.splineKeyframes.TopLeftRed[360].Flags.Linear==true,
+       "Region Color Transition writes genuine native Linear interpolation")
 expect(changedFillControl.animations.TopLeftAlpha[384]==1,
        "Color Transition preserves independent Fill Alpha")
 expect(fadeRegionMerge.animations.Blend[334]==0,
@@ -684,6 +700,8 @@ expect(instantControl.animations.TopLeftRed[389]==130/255 and
 expect(instantControl.animations.TopLeftGreen[389]==150/255 and
        instantControl.animations.TopLeftGreen[390]==1,
        "Instant Color Change respects discrete integer-frame switch")
+expect(instantControl.splineKeyframes.TopLeftRed[389].Flags.StepIn==true,
+       "Instant Color Change uses native StepIn hold rather than subframe blending")
 expect(find(comp,instantId,"merge").animations.Blend==nil,
        "Instant Color Change never creates an opacity keyframe")
 _G.tool,_G.comp=saveColorTool,saveColorComp
