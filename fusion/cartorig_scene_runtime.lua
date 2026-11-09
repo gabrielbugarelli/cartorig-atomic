@@ -892,6 +892,12 @@ local function attach_inspector_motion(tool, kind)
             BTNCS_Execute=marker_pop_callback()
         }
     elseif kind=="Route" then
+        controls.CR2FollowerProgress={
+            LINKS_Name="Follower Progress",
+            LINKID_DataType="Number",INPID_InputControl="SliderControl",
+            ICS_ControlPage="Control",INP_Default=0,
+            INP_MinScale=0,INP_MaxScale=1,INP_External=false
+        }
         controls.CR2MotionErase={
             LINKS_Name="Apply MO-RTE-02 Erase Path",
             LINKID_DataType="Number",INPID_InputControl="ButtonControl",
@@ -1646,6 +1652,9 @@ function M.add_route(comp,origin,arrival,details)
             -3,n*2,scene.sceneId,id,"control")
         set_background_rgb(source,214/255,223/255,230/255)
         attach_inspector_motion(source,"Route")
+        if source:SetInput("CR2FollowerProgress",0)==false then
+            fail("HOST_PROGRESS","Cannot initialize native Route follower channel")
+        end
         local previousMask
         local lengths={}
         for i,segment in ipairs(segments) do
