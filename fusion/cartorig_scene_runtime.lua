@@ -335,12 +335,27 @@ local function cartorig_color()
             if not obj:AddModifier(channel,"BezierSpline") then
                 error("HOST_ANIMATION: Cannot animate Region Fill Color")
             end
+            -- Replace the modifier's seed key with exact spline flags:
+            -- StepIn implements a true hold (including subframe samples);
+            -- Color Transition is component-wise Linear, never named-color
+            -- interpolation. Fusion's BezierSpline API owns both modes.
+            local output=obj[channel]:GetConnectedOutput()
+            local spline=output and output:GetTool()
+            if not spline or not spline.SetKeyFrames then
+                error("HOST_SPLINE: Cannot inspect native Fill Color modifier")
+            end
+            local authored={}
             if isInstant then
-                if now>0 then obj:SetInput(channel,source[i],now-1) end
-                obj:SetInput(channel,target[i],now)
+                if now>0 then
+                    authored[now-1]={source[i],Flags={StepIn=true}}
+                end
+                authored[now]={target[i]}
             else
-                obj:SetInput(channel,source[i],now)
-                obj:SetInput(channel,target[i],endFrame)
+                authored[now]={source[i],Flags={Linear=true}}
+                authored[endFrame]={target[i],Flags={Linear=true}}
+            end
+            if spline:SetKeyFrames(authored,true)==false then
+                error("HOST_SPLINE: Cannot write exact Color interpolation")
             end
         end
         local binding={
