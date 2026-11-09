@@ -1892,6 +1892,11 @@ function M.unlink_follower(comp,routeId)
         mask:SetInput("Center",point(normalized[1],normalized[2]))
         mask:SetData("CartoRigAtomic.FollowerLinkV2",nil)
         route:SetData("CartoRigAtomic.RouteFollowerV2",nil)
+        local previousMotion=route:GetData("CartoRigAtomic.MotionFollowerV2")
+        if type(previousMotion)=="table" then
+            previousMotion.state="KEPT_AS_MANUAL"
+            route:SetData("CartoRigAtomic.MotionFollowerV2",previousMotion)
+        end
         routeEntry.followerMarkerId=nil
         markerEntry.followingRouteId=nil
         comp:SetData(SCENE_KEY,scene)
