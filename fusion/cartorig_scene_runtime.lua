@@ -565,6 +565,112 @@ if not ok then print("CartoRig Highlight Pulse: "..tostring(problem)) end
 ]==]
 end
 
+-- Pop In acts on the Marker-owned EllipseMask dimensions, never on Center,
+-- geoanchor coordinates, Fill Color, or the outer object opacity.
+local function marker_pop_callback()
+    return [==[
+local function pop()
+    local selected=tool
+    local host=selected and (selected.Comp or
+        (rawget(_G,"fu") and fu.CurrentComp) or rawget(_G,"comp"))
+    if not host then error("HOST_COMP: Fusion composition unavailable") end
+    local tag=selected:GetData("CartoRigAtomic.IdentityV2")
+    if type(tag)~="table" or tag.role~="control" then
+        error("OBJECT_ID: Marker Control was not selected")
+    end
+    local scene=host:GetData("CartoRigAtomic.SceneV2")
+    if type(scene)~="table" or scene.sceneId~=tag.sceneId then
+        error("SCENE_CONTEXT: Wrong Fusion composition")
+    end
+    local owned=false
+    for _,entry in ipairs(scene.objects or {}) do
+        if entry.id==tag.objectId then
+            owned=true
+            if entry.kind~="Marker" then
+                error("INCOMPATIBLE_OBJECT: Pop In requires Marker")
+            end
+            if entry.locked or entry.visible==false then
+                error("LOCKED: Marker must be visible and unlocked")
+            end
+            break
+        end
+    end
+    if not owned then error("OBJECT_MISSING: Marker no longer exists") end
+    local duration=tonumber(selected:GetInput("CR2PopDuration"))
+    local pixels=tonumber(selected:GetInput("CR2PopSizePixels"))
+    local now=tonumber(host.CurrentTime)
+    local attrs=host:GetAttrs()
+    if not duration or duration%1~=0 or duration<2 or duration>10000 or
+       not pixels or pixels<=0 or pixels>500 or
+       not now or now%1~=0 or now<0 or
+       not attrs or not tonumber(attrs.COMPN_RenderEnd) or
+       now+duration>tonumber(attrs.COMPN_RenderEnd) then
+        error("INVALID_POP: Check target pixels, duration and Fusion timeline")
+    end
+    local width,height
+    local ok=pcall(function()
+        width=tonumber(host:GetPrefs("Comp.FrameFormat.Width"))
+        height=tonumber(host:GetPrefs("Comp.FrameFormat.Height"))
+    end)
+    if not ok or not width or not height or width<1 or height<1 then
+        error("FRAME_FORMAT: Fusion output dimensions are unavailable")
+    end
+    local mask
+    for _,candidate in pairs(host:GetToolList(false) or {}) do
+        local hit,id=pcall(function()
+            return candidate:GetData("CartoRigAtomic.IdentityV2")
+        end)
+        if hit and type(id)=="table" and id.sceneId==tag.sceneId and
+           id.objectId==tag.objectId and id.role=="mask" then
+            mask=candidate
+            break
+        end
+    end
+    if not mask or not mask.Width or not mask.Height then
+        error("HOST_MASK: Marker EllipseMask is unavailable")
+    end
+    for _,channel in ipairs({"Width","Height"}) do
+        local port=mask[channel]
+        local hit,connected=pcall(function() return port:GetConnectedOutput() end)
+        if not hit or connected then
+            error("MOTION_CONFLICT: Marker Size channel is already animated")
+        end
+    end
+    local peakFrame=now+math.floor(duration*.70+.5)
+    local endFrame=now+duration
+    if peakFrame<=now or peakFrame>=endFrame then
+        error("FRAME_COLLISION: Pop peak collides with start/end")
+    end
+    local targetWidth=pixels/width
+    local targetHeight=pixels/height
+    host:StartUndo("CartoRig: MO-MRK-02 Pop In")
+    local success,problem=pcall(function()
+        if not mask:AddModifier("Width","BezierSpline") or
+           not mask:AddModifier("Height","BezierSpline") then
+            error("HOST_ANIMATION: Marker Size cannot have native curves")
+        end
+        for _,component in ipairs({
+            {"Width",targetWidth},{"Height",targetHeight}
+        }) do
+            mask:SetInput(component[1],0,now)
+            mask:SetInput(component[1],1.15*component[2],peakFrame)
+            mask:SetInput(component[1],component[2],endFrame)
+        end
+        selected:SetData("CartoRigAtomic.MotionPopV2",{
+            presetId="MO-MRK-02",channel="Size",
+            schemaVersion=2,startFrame=now,endFrame=endFrame,
+            targetPixels=pixels,peakPercent=115,peakFrame=peakFrame,
+            state="ANIMATED_PRESET"
+        })
+    end)
+    host:EndUndo(success)
+    if not success then error(problem) end
+end
+local ok,problem=pcall(pop)
+if not ok then print("CartoRig Marker Pop: "..tostring(problem)) end
+]==]
+end
+
 local function attach_inspector_motion(tool, kind)
     if kind~="Marker" and kind~="Label" and kind~="Camera" and
         kind~="Region" and kind~="Route" then
@@ -664,6 +770,25 @@ local function attach_inspector_motion(tool, kind)
             LINKID_DataType="Number",INPID_InputControl="ButtonControl",
             ICS_ControlPage="Motion",INP_External=false,
             BTNCS_Execute=inspector_motion_callback("RegionFadeOut")
+        }
+    elseif kind=="Marker" then
+        controls.CR2PopDuration={
+            LINKS_Name="Pop In Duration (Frames)",
+            LINKID_DataType="Number",INPID_InputControl="SliderControl",
+            ICS_ControlPage="Motion",INP_Integer=true,INP_Default=18,
+            INP_MinScale=2,INP_MaxScale=180,INP_External=false
+        }
+        controls.CR2PopSizePixels={
+            LINKS_Name="Marker Target Size (px)",
+            LINKID_DataType="Number",INPID_InputControl="SliderControl",
+            ICS_ControlPage="Motion",INP_Default=14,
+            INP_MinScale=1,INP_MaxScale=200,INP_External=false
+        }
+        controls.CR2MotionPop={
+            LINKS_Name="Apply MO-MRK-02 Pop In",
+            LINKID_DataType="Number",INPID_InputControl="ButtonControl",
+            ICS_ControlPage="Motion",INP_External=false,
+            BTNCS_Execute=marker_pop_callback()
         }
     elseif kind=="Route" then
         controls.CR2MotionErase={
