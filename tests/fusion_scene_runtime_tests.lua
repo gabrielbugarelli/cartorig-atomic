@@ -93,6 +93,8 @@ local function new_comp()
         end
         t.Input = port("Input")
         t.Blend = port("Blend")
+        t.Size = port("Size")
+        t.Center = port("Center")
         t.Background = port("Background")
         t.Foreground = port("Foreground")
         t.EffectMask = port("EffectMask")
