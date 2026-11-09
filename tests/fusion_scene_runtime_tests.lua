@@ -89,19 +89,29 @@ local function new_comp()
             return true
         end
         local function port(name)
-            return {
-                GetConnectedOutput = function()
-                    if (t.modifiers or {})[name] then
-                        return { GetTool = function() return { ID = "BezierSpline" } end }
-                    end
-                    return t.links[name]
+            local p={}
+            function p:GetConnectedOutput()
+                if (t.modifiers or {})[name] then
+                    return { GetTool = function() return { ID = "BezierSpline" } end }
                 end
-            }
+                return t.links[name]
+            end
+            function p:SetExpression(expression)
+                t.expressions=t.expressions or {}
+                t.expressions[name]=expression
+                return true
+            end
+            function p:GetExpression()
+                return (t.expressions or {})[name]
+            end
+            return p
         end
         t.Input = port("Input")
         t.Blend = port("Blend")
         t.Size = port("Size")
         t.Center = port("Center")
+        t.CR2CameraLongitude = port("CR2CameraLongitude")
+        t.CR2CameraLatitude = port("CR2CameraLatitude")
         t.WriteLength = port("WriteLength")
         t.Width = port("Width")
         t.Height = port("Height")
@@ -150,6 +160,12 @@ expect(camera.UserControls.CR2MotionApply.ICS_ControlPage=="Motion",
 expect(camera.UserControls.CR2MotionApply.BTNCS_Execute:find("MO-CAM-02",1,true),
        "Camera Zoom To can apply from its own Inspector even with Scene closed")
 expect(camera.links.Input == base, "camera begins with base background only")
+expect(camera.inputs.CR2CameraLongitude==0 and
+       camera.inputs.CR2CameraLatitude==0,
+       "Camera starts with independent zero-valued native geographic channels")
+expect(camera.expressions.Center:find("CR2CameraLongitude",1,true) and
+       camera.expressions.Center:find("CR2CameraLatitude",1,true),
+       "Fusion evaluates Point Center from independently keyed WGS84 scalar Controls")
 expect(base.ID == "Fuse.CartoRigAtomicLand",
        "Base Map is a genuine native Fusion vector renderer, not flat placeholder")
 expect(runtime.select_system(comp,"base")==base and comp.active==base,
@@ -227,7 +243,14 @@ expect(comp.active == control1, "native Fusion tool becomes Inspector selection"
 -- Same camera applied to every geoanchored layer, all keys in native host.
 runtime.focus(comp, -46.6333, -23.5505, 2)
 expect(camera.inputs.Size == 2, "native Transform Size carries zoom")
-expect(camera.inputs.Center[1] > 0.5, "camera recenters on east/west coordinate")
+expect(camera.inputs.CR2CameraLongitude == -46.6333 and
+       camera.inputs.CR2CameraLatitude == -23.5505,
+       "Focus changes only native geographic longitude and latitude")
+runtime.focus(comp, -46.6333, -23.5505)
+expect(camera.inputs.Size == 2, "Focus without zoom leaves camera scale untouched")
+runtime.set_zoom(comp,3)
+expect(camera.inputs.Size==3, "Set Zoom explicitly changes shared Fusion scale")
+runtime.set_zoom(comp,2)
 expect(camera.links.Input == find(comp, label, "merge"), "focus preserves stack links")
 
 runtime.fade_in(comp, marker1, 100, 24)
