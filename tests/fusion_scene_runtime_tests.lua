@@ -2,6 +2,8 @@
 -- This tests our state and graph contracts. It does NOT render pixels
 -- and is NOT evidence that DaVinci Resolve Studio 20 passed host QA.
 local runtime = dofile("fusion/cartorig_scene_runtime.lua")
+_G.Polyline=function(data) return data end
+_G.FuID=function(data) return data[1] end
 local checks = 0
 local function expect(condition, reason)
     checks = checks + 1
@@ -335,5 +337,104 @@ existingOutput:ConnectInput("Input", foreign)
 expect_failure(function() runtime.create(busy) end, "OUTPUT_BUSY")
 expect(#busy.list == 2 and existingOutput.links.Input == foreign,
        "never hijack or delete unrelated Fusion nodes")
+
+
+-- Region and Route are actual native Fusion image-producing layer graphs,
+-- never static lookup points pretending to be a polygon.
+local state = {
+    id="ne10m:state:ap-actual",kind="State",name="Amapá",
+    parent="Brazil",country="Brazil"
+}
+local statePolygon={
+    id=state.id,ringCount=3,
+    rings={
+        {kind="O",vertices={
+            {lon=-52,lat=-1},{lon=-50,lat=-1},
+            {lon=-50,lat=2},{lon=-52,lat=2}}},
+        {kind="H",vertices={
+            {lon=-51,lat=.3},{lon=-50.7,lat=.3},
+            {lon=-50.7,lat=.7},{lon=-51,lat=.7}}},
+        {kind="O",vertices={
+            {lon=-54,lat=0},{lon=-53.5,lat=0},
+            {lon=-53.5,lat=1},{lon=-54,lat=1}}},
+    }
+}
+expect(runtime.contains_point(statePolygon,-51.05,.1)==true,
+    "Macapá point is inside the explicit state polygon")
+expect(runtime.contains_point(statePolygon,-50.8,.5)==false,
+    "admin1 polygon hole must exclude point")
+expect(runtime.contains_point(statePolygon,-53.75,.5)==true,
+    "multipolygon island fragment is independently included")
+expect(runtime.contains_point(statePolygon,-49,.1)==false,
+    "points outside polygon are rejected")
+
+local regionId = runtime.add_region(comp,state,statePolygon)
+local regionControl=find(comp,regionId,"control")
+local regionRender=find(comp,regionId,"render")
+local regionMerge=find(comp,regionId,"merge")
+local regionFillMask=find(comp,regionId,"shape1")
+local regionHoleMask=find(comp,regionId,"shape2")
+local regionBorder=find(comp,regionId,"border")
+expect(regionControl and regionRender and regionMerge and regionFillMask and
+    regionHoleMask and regionBorder,
+    "Region has fully managed native background, fill, hole, stroke and composite")
+expect(regionControl.links.EffectMask==find(comp,regionId,"shape3"),
+    "Region final fill mask carries all multipart rings")
+expect(regionHoleMask.inputs.PaintMode=="Subtract",
+    "inner ring subtracts rather than covering a real geographic lake/hole")
+expect(regionMerge.links.Foreground==regionRender,
+    "Region stroke composite is the authored visible layer")
+expect(regionControl.inputs.TopLeftRed==130/255,
+    "Region uses approved neutral grey-blue default rather than editorial highlight")
+expect(runtime.inspect(comp).objects[#runtime.inspect(comp).objects].sourceRef.featureId==
+    state.id,"Region keeps Natural Earth polygon provenance")
+expect(#regionFillMask.inputs.Polyline.Points==4,
+    "real polygon vertices become one vector mask, not thousands of Fusion nodes")
+expect_failure(function()
+    runtime.add_region(comp,{id="ne10m:city:1",kind="City",name="São Paulo"},
+                       statePolygon)
+end,"INVALID_REGION")
+expect_failure(function()
+    runtime.add_region(comp,{id="wrong",kind="State",name="Other"},
+                       statePolygon)
+end,"NO_GEOMETRY")
+
+local origin={id="ne10m:city:bsb",name="Brasília",lon=-47.9,lat=-15.8}
+local arrival={id="ne10m:city:macapa",name="Macapá",lon=-51.05,lat=.1}
+expect_failure(function()
+    runtime.add_route(comp,origin,nil,{destinationState=state,
+                                       destinationGeometry=statePolygon})
+end,"ENDPOINT_REQUIRED")
+expect_failure(function()
+    runtime.add_route(comp,origin,{name="Outside",lon=-41,lat=.1},
+      {destinationState=state,destinationGeometry=statePolygon})
+end,"ENDPOINT_OUTSIDE_STATE")
+local routeId=runtime.add_route(comp,origin,arrival,
+    {destinationState=state,destinationGeometry=statePolygon,pathType="Curved"})
+local routeControl=find(comp,routeId,"control")
+local routePath=find(comp,routeId,"shape"..tostring(#comp:GetData(
+    "CartoRigAtomic.SceneV2").objects))
+local routeObject=runtime.inspect(comp).objects[#runtime.inspect(comp).objects]
+expect(routeObject.kind=="Route","route has a distinct author object identity")
+local routeMeta=comp:GetData("CartoRigAtomic.SceneV2").objects[
+    #comp:GetData("CartoRigAtomic.SceneV2").objects].route
+expect(routeMeta.from.sourceId==origin.id and routeMeta.to.sourceId==arrival.id,
+    "chosen city endpoints persist with independent source identity")
+expect(routeMeta.destinationStateId==state.id and routeMeta.pathType=="Curved",
+    "route carries destination-region ID and spatial path type")
+expect(routeControl.inputs.TopLeftRed==214/255,
+    "native editable line defaults to neutral cartographic stroke")
+expect(find(comp,routeId,"merge").links.Foreground==routeControl,
+    "Route is visible in Fusion image compositing stack")
+local regionNodeCount=#comp.list
+runtime.remove(comp,regionId)
+expect(not find(comp,regionId,"control") and not find(comp,regionId,"render"),
+    "Deleting Region removes only its fully-owned native rendering graph")
+expect(#comp.list==regionNodeCount-11,
+    "Deleting Region removes all fill/stroke polygons, backgrounds and merges")
+expect(find(comp,routeId,"control")==routeControl,
+    "Deleting an independent Region does not destroy Route Control")
+expect(find(comp,routeId,"merge").links.Background==find(comp,label,"merge"),
+    "Region removal reconnects the remaining independent draw stack")
 
 print("PASS: " .. checks .. " original Fusion graph / Control / Motion assertions")
