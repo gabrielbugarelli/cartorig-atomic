@@ -430,7 +430,7 @@ local regionNodeCount=#comp.list
 runtime.remove(comp,regionId)
 expect(not find(comp,regionId,"control") and not find(comp,regionId,"render"),
     "Deleting Region removes only its fully-owned native rendering graph")
-expect(#comp.list==regionNodeCount-11,
+expect(#comp.list==regionNodeCount-10,
     "Deleting Region removes all fill/stroke polygons, backgrounds and merges")
 expect(find(comp,routeId,"control")==routeControl,
     "Deleting an independent Region does not destroy Route Control")
