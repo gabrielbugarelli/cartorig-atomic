@@ -117,4 +117,52 @@ else
     check(#output.last.draws==1,
           "land opacity can be animated without modifying borders")
 end
+
+-- Execute the installed Inspector button's source under a mock Fusion host.
+-- This verifies keyframe calls and guards; it does NOT claim real Resolve certification.
+check(inputs.CR2LayerFadeApply.metadata.ICS_ControlPage=="Motion",
+      "Base Map has a persistent native Inspector Motion page")
+local btnSource=inputs.CR2LayerFadeApply.metadata.BTNCS_Execute
+check(type(btnSource)=="string" and btnSource:find("MO-MAP-01",1,true),
+      "native button carries a self-contained Layer Fade callback")
+local toolData={["CartoRigAtomic.IdentityV2"]={role="base"}}
+local keys={}
+local host={CurrentTime=90,started=false,accepted=false}
+function host:GetAttrs()return {COMPN_RenderEnd=300}end
+function host:StartUndo(label)self.started=label end
+function host:EndUndo(ok)self.accepted=ok end
+local motionTool={Comp=host,inputs={TransparentOverlay=0,
+    CR2LayerFadeLayer=1,CR2LayerFadeDuration=18},ports={}}
+function motionTool:GetData(name)return toolData[name]end
+function motionTool:SetData(name,value)toolData[name]=value end
+function motionTool:GetInput(name)return self.inputs[name]end
+function motionTool:AddModifier(channel,kind)
+    if kind~="BezierSpline" then return false end
+    self.animated=self.animated or {}
+    self.animated[channel]=true
+    return true
+end
+function motionTool:SetInput(name,value,frame)
+    keys[name]=keys[name] or {}
+    keys[name][frame]=value
+    return true
+end
+for _,channel in ipairs({"OceanOpacity","LandOpacity","BorderOpacity"}) do
+    motionTool.ports[channel]={GetConnectedOutput=function()
+        if motionTool.animated and motionTool.animated[channel] then return {} end
+        return nil
+    end}
+    motionTool[channel]=motionTool.ports[channel]
+end
+local previousTool,previousComp=_G.tool,_G.comp
+_G.tool,_G.comp=motionTool,host
+local button=assert((loadstring or load)(btnSource))
+button()
+check(keys.LandOpacity[90]==0 and keys.LandOpacity[108]==1,
+      "Land Layer Fade writes 0..1 native Spline keys on exact composition frames")
+check(keys.OceanOpacity==nil and keys.BorderOpacity==nil,
+      "Layer Fade does not animate unrelated Base Map layers")
+check(toolData["CartoRigAtomic.MotionLayerFadeV2"].presetId=="MO-MAP-01" and
+      host.accepted==true,"native Layer Fade stores motion identity and commits Undo")
+_G.tool,_G.comp=previousTool,previousComp
 print("PASS: "..checks.." actual Fusion Base Map Fuse / offline vector source assertions")
