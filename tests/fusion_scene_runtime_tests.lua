@@ -437,4 +437,26 @@ expect(find(comp,routeId,"control")==routeControl,
 expect(find(comp,routeId,"merge").links.Background==find(comp,label,"merge"),
     "Region removal reconnects the remaining independent draw stack")
 
+local antimeridianId=runtime.add_route(comp,
+    {id="origin-east",name="East",lon=179,lat=0},
+    {id="destination-west",name="West",lon=-179,lat=0},
+    {pathType="Straight",name="Dateline crossing"})
+local dateline=comp:GetData("CartoRigAtomic.SceneV2").objects[
+    #comp:GetData("CartoRigAtomic.SceneV2").objects]
+expect(dateline.route.segments==2,
+    "short antimeridian route must split at world map seam")
+local maskA=find(comp,antimeridianId,
+    "shape"..tostring((#comp:GetData("CartoRigAtomic.SceneV2").objects)*100+1))
+local maskB=find(comp,antimeridianId,
+    "shape"..tostring((#comp:GetData("CartoRigAtomic.SceneV2").objects)*100+2))
+expect(maskA and maskB and maskB.links.EffectMask==maskA,
+    "dateline route is two additive vector masks, never a globe-wide diagonal")
+expect(math.abs(maskA.inputs.Polyline.Points[1].X-
+                maskA.inputs.Polyline.Points[2].X)<.01,
+    "east of dateline path does not cross central world geography")
+expect(math.abs(maskB.inputs.Polyline.Points[1].X-
+                maskB.inputs.Polyline.Points[2].X)<.01,
+    "west of dateline path remains spatially local")
+
+
 print("PASS: " .. checks .. " original Fusion graph / Control / Motion assertions")
