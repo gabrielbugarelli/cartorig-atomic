@@ -675,4 +675,39 @@ expect(find(comp,instantId,"merge").animations.Blend==nil,
        "Border Draw does not accidentally animate Object Opacity")
 _G.tool,_G.comp=oldBorderTool,oldBorderComp
 
+
+-- Highlight Pulse is isolated from the Region's Fill, border and outer Blend:
+-- this Region already has both Color and Border Draw Spline keys.
+local pulseControl=instantControl
+local pulseLayer=find(comp,instantId,"render")
+local previousTool,previousComp=_G.tool,_G.comp
+_G.tool,_G.comp=pulseControl,comp
+comp.CurrentTime=200
+pulseControl.inputs.CR2PulseCount=2
+pulseControl.inputs.CR2PulseCycle=18
+pulseControl.inputs.CR2PulseStrength=.35
+local pulseButton=assert((loadstring or load)(
+    pulseControl.UserControls.CR2MotionPulse.BTNCS_Execute))
+pulseButton()
+expect(pulseLayer.animations.Blend[200]==0,
+    "Highlight Pulse begins at zero independently of Region opacity")
+expect(pulseLayer.animations.Blend[209]==.35 and
+       pulseLayer.animations.Blend[218]==0,
+    "first 18-frame pulse rises to peak and returns to zero")
+expect(pulseLayer.animations.Blend[227]==.35 and
+       pulseLayer.animations.Blend[236]==0,
+    "second 18-frame pulse rises to peak and returns to zero")
+expect(pulseControl:GetData("CartoRigAtomic.MotionHighlightV2").presetId==
+       "MO-REG-06","Highlight Pulse has separate per-object native motion identity")
+expect(pulseControl.animations.TopLeftRed[390]==0,
+    "Highlight Pulse does not alter previously customized Region Fill")
+expect(borderLast.animations.WriteLength[186]==1,
+    "Highlight Pulse does not modify an independently animated Border Draw")
+expect(find(comp,instantId,"merge").animations.Blend==nil,
+    "Highlight Strength is independent of object opacity")
+pulseButton()
+expect(pulseLayer.animations.Blend[236]==0,
+    "re-applying Highlight Pulse rejects existing Spline without overwriting")
+_G.tool,_G.comp=previousTool,previousComp
+
 print("PASS: " .. checks .. " original Fusion graph / Control / Motion assertions")
