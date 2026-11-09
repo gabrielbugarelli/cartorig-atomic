@@ -15,6 +15,11 @@ FuRegisterClass("CartoRigAtomicLand", CT_SourceTool, {
 local cachedData
 local cachedError
 local function path_to_data()
+    -- Optional test/build override; editors use the installed per-user path.
+    local testData=os.getenv("CARTORIG_ATOMIC_DATA_DIR")
+    if testData and testData~="" then
+        return testData.."/geometry.tsv"
+    end
     local app=os.getenv("APPDATA")
     if not app or app=="" then
         return nil,"APPDATA unavailable. Cannot resolve installed offline geography."
