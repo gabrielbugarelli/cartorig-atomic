@@ -1732,6 +1732,29 @@ function M.focus(comp, lon, lat, zoom)
 end
 
 
+function M.set_fly_target(comp,feature,zoom)
+    if type(feature)~="table" or feature.kind~="City" or
+       type(feature.id)~="string" or not feature.id:match("^ne10m:city:") or
+       type(feature.point)~="table" then
+        fail("TARGET_REQUIRED","Fly To requires an explicitly selected real City")
+    end
+    local lon,lat=validate_position(feature.point.lon,feature.point.lat)
+    zoom=tonumber(zoom)
+    if not zoom or zoom~=zoom or zoom<.25 or zoom>100 then
+        fail("INVALID_ZOOM","Choose explicit target Camera Zoom 0.25..100")
+    end
+    local scene=require_scene(comp)
+    local _,camera=validate_graph(comp,scene)
+    return undo(comp,"CartoRig: Choose Fly To Target",function()
+        camera:SetData("CartoRigAtomic.CameraFlyTargetV2",{
+            schemaVersion=2,featureId=feature.id,featureType="City",
+            name=tostring(feature.name or ""),country=tostring(feature.country or ""),
+            longitude=lon,latitude=lat,zoom=zoom
+        })
+        return feature.id
+    end)
+end
+
 function M.set_zoom(comp, zoom)
     zoom=tonumber(zoom)
     if not zoom or zoom~=zoom or zoom<.25 or zoom>100 then
