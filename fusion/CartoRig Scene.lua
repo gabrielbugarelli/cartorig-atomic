@@ -56,6 +56,7 @@ local window = dispatcher:AddWindow({
         ui:Button{ ID = "AddFoundLabel", Text = "Add Label" },
         ui:Button{ ID = "FocusFound", Text = "Focus" }
     },
+    ui:Button{ ID = "SetFlyTarget", Text = "Use Selected City as Fly To Target" },
     ui:Label{ Text = "CREATE ROUTE FROM SELECTED LOCATIONS" },
     ui:HGroup{
         ui:Button{ ID = "UseRouteFrom", Text = "Set Start" },
@@ -473,6 +474,16 @@ function window.On.CreateRoute.Clicked(_)
              pathType=style,
              name=routeStart.name.." → "..routeArrival.name.." ("..
                  routeState.name..")"})
+    end)
+end
+
+function window.On.SetFlyTarget.Clicked(_)
+    handle(function(comp)
+        local feature=current_match()
+        if feature.kind~="City" or not feature.point then
+            error("TARGET_REQUIRED: Choose an explicit City for Camera Fly To",0)
+        end
+        return Runtime.set_fly_target(comp,feature,items.Zoom.Text)
     end)
 end
 
