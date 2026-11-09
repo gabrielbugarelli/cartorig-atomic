@@ -17,7 +17,7 @@ PLACEHOLDER = "@@EMBED_RUNTIME@@"
 def package(output: Path) -> Path:
     core = ENGINE.read_text(encoding="utf-8")
     scene = UI.read_text(encoding="utf-8")
-    if core.count("return M") != 1 or not core.endswith("\n"):
+    if not core.rstrip().endswith("return M") or not core.endswith("\n"):
         raise ValueError("Fusion runtime must be a complete, self-contained module")
     if scene.count(PLACEHOLDER) != 1:
         raise ValueError("Scene entry must include exactly one runtime placeholder")
