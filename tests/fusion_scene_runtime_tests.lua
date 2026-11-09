@@ -139,6 +139,24 @@ expect(camera.UserControls.CR2MotionApply.ICS_ControlPage=="Motion",
 expect(camera.UserControls.CR2MotionApply.BTNCS_Execute:find("MO-CAM-02",1,true),
        "Camera Zoom To can apply from its own Inspector even with Scene closed")
 expect(camera.links.Input == base, "camera begins with base background only")
+expect(base.ID == "Fuse.CartoRigAtomicLand",
+       "Base Map is a genuine native Fusion vector renderer, not flat placeholder")
+expect(runtime.select_system(comp,"base")==base and comp.active==base,
+       "Base Map exposes its own Inspector Control")
+expect(runtime.select_system(comp,"camera")==camera and comp.active==camera,
+       "Camera exposes separate native Inspector Control")
+runtime.set_display_mode(comp,"Transparent Overlay")
+expect(base.inputs.TransparentOverlay==1,
+       "Transparent Overlay hides only native vector base layers")
+expect(runtime.inspect(comp).displayMode=="Transparent Overlay",
+       "display mode stored in independent Fusion composition state")
+runtime.set_display_mode(comp,"Full Map")
+expect(base.inputs.TransparentOverlay==0,
+       "switching back restores the original Full Map renderer")
+expect_failure(function()
+    runtime.set_display_mode(comp,"Invisible/Unknown")
+end,"INVALID_MODE")
+
 for _, tool in ipairs(comp.list) do
     expect(next(tool.animations) == nil, "Scene creation never writes keyframes")
 end
