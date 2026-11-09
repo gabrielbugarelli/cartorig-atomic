@@ -471,6 +471,100 @@ if not ok then print("CartoRig Border Draw: "..tostring(reason)) end
 ]==]
 end
 
+-- Region Highlight Pulse is a self-contained Inspector action. Its
+-- BezierSpline belongs to the optional highlight Merge's Blend, *never* to
+-- the Region's Fill, Border, or outer Object Opacity channels.
+local function region_highlight_callback()
+    return [==[
+local function pulse()
+    local selected=tool
+    local host=selected and (selected.Comp or
+        (rawget(_G,"fu") and fu.CurrentComp) or rawget(_G,"comp"))
+    if not host then error("HOST_COMP: Fusion composition unavailable") end
+    local tag=selected:GetData("CartoRigAtomic.IdentityV2")
+    if type(tag)~="table" or tag.role~="control" then
+        error("OBJECT_ID: Region Control was not selected")
+    end
+    local scene=host:GetData("CartoRigAtomic.SceneV2")
+    if type(scene)~="table" or scene.sceneId~=tag.sceneId then
+        error("SCENE_CONTEXT: Wrong Fusion composition")
+    end
+    local owned=false
+    for _,entry in ipairs(scene.objects or {}) do
+        if entry.id==tag.objectId then
+            owned=true
+            if entry.kind~="Region" then
+                error("INCOMPATIBLE_OBJECT: Highlight Pulse requires Region")
+            end
+            if entry.locked or entry.visible==false then
+                error("LOCKED: Region must be visible and unlocked")
+            end
+            break
+        end
+    end
+    if not owned then error("OBJECT_MISSING: Region no longer exists") end
+    local cycles=tonumber(selected:GetInput("CR2PulseCount"))
+    local cycle=tonumber(selected:GetInput("CR2PulseCycle"))
+    local peak=tonumber(selected:GetInput("CR2PulseStrength"))
+    local start=tonumber(host.CurrentTime)
+    local attrs=host:GetAttrs()
+    local finish=start and cycles and cycle and start+cycles*cycle or nil
+    if not start or start<0 or start%1~=0 or
+       not cycles or cycles%1~=0 or cycles<1 or cycles>8 or
+       not cycle or cycle%1~=0 or cycle<2 or cycle>120 or
+       not peak or peak<=0 or peak>1 or not finish or
+       not attrs or not tonumber(attrs.COMPN_RenderEnd) or
+       finish>tonumber(attrs.COMPN_RenderEnd) then
+        error("INVALID_PULSE: Check Count, Cycle, Strength and Fusion end frame")
+    end
+    local highlight
+    for _,candidate in pairs(host:GetToolList(false) or {}) do
+        local ok,id=pcall(function()
+            return candidate:GetData("CartoRigAtomic.IdentityV2")
+        end)
+        if ok and type(id)=="table" and id.sceneId==tag.sceneId and
+           id.objectId==tag.objectId and id.role=="render" then
+            highlight=candidate
+            break
+        end
+    end
+    if not highlight or not highlight.Blend then
+        error("HOST_HIGHLIGHT: Region highlight layer is missing")
+    end
+    local ok,connection=pcall(function()
+        return highlight.Blend:GetConnectedOutput()
+    end)
+    if not ok or connection then
+        error("MOTION_CONFLICT: Highlight Strength is already animated")
+    end
+    host:StartUndo("CartoRig: MO-REG-06 Highlight Pulse")
+    local success,problem=pcall(function()
+        if not highlight:AddModifier("Blend","BezierSpline") then
+            error("HOST_ANIMATION: Highlight Blend cannot have a Spline")
+        end
+        highlight:SetInput("Blend",0,start)
+        for index=0,cycles-1 do
+            local from=start+index*cycle
+            local middle=from+math.floor(cycle/2)
+            local last=from+cycle
+            highlight:SetInput("Blend",peak,middle)
+            highlight:SetInput("Blend",0,last)
+        end
+        selected:SetData("CartoRigAtomic.MotionHighlightV2",{
+            presetId="MO-REG-06",channel="Highlight Strength",
+            schemaVersion=2,startFrame=start,endFrame=finish,
+            pulseCount=cycles,cycleFrames=cycle,peak=peak,
+            state="ANIMATED_PRESET"
+        })
+    end)
+    host:EndUndo(success)
+    if not success then error(problem) end
+end
+local ok,problem=pcall(pulse)
+if not ok then print("CartoRig Highlight Pulse: "..tostring(problem)) end
+]==]
+end
+
 local function attach_inspector_motion(tool, kind)
     if kind~="Marker" and kind~="Label" and kind~="Camera" and
         kind~="Region" and kind~="Route" then
@@ -540,6 +634,30 @@ local function attach_inspector_motion(tool, kind)
             LINKID_DataType="Number",INPID_InputControl="ButtonControl",
             ICS_ControlPage="Motion",INP_External=false,
             BTNCS_Execute=region_border_callback()
+        }
+        controls.CR2PulseCount={
+            LINKS_Name="Highlight Pulses",
+            LINKID_DataType="Number",INPID_InputControl="SliderControl",
+            ICS_ControlPage="Motion",INP_Integer=true,INP_Default=2,
+            INP_MinScale=1,INP_MaxScale=8,INP_External=false
+        }
+        controls.CR2PulseCycle={
+            LINKS_Name="Pulse Cycle (Frames)",
+            LINKID_DataType="Number",INPID_InputControl="SliderControl",
+            ICS_ControlPage="Motion",INP_Integer=true,INP_Default=18,
+            INP_MinScale=2,INP_MaxScale=120,INP_External=false
+        }
+        controls.CR2PulseStrength={
+            LINKS_Name="Highlight Strength",
+            LINKID_DataType="Number",INPID_InputControl="SliderControl",
+            ICS_ControlPage="Motion",INP_Default=.35,
+            INP_MinScale=0,INP_MaxScale=1,INP_External=false
+        }
+        controls.CR2MotionPulse={
+            LINKS_Name="Apply MO-REG-06 Highlight Pulse",
+            LINKID_DataType="Number",INPID_InputControl="ButtonControl",
+            ICS_ControlPage="Motion",INP_External=false,
+            BTNCS_Execute=region_highlight_callback()
         }
         controls.CR2MotionFadeOut={
             LINKS_Name="Apply MO-REG-02 Fade Out",
