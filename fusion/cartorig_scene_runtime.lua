@@ -359,6 +359,118 @@ if not ok then print("CartoRig Region Color: "..tostring(why)) end
     return text:gsub("%%%%INSTANT%%%%",instant and "true" or "false")
 end
 
+-- Border Draw owns only vector stroke WriteLength curves. Fill Color,
+-- Fill Alpha, Stroke Width and existing Object Opacity curves remain untouched.
+local function region_border_callback()
+    return [==[
+local function apply()
+    local selected=tool
+    local host=selected and (selected.Comp or
+        (rawget(_G,"fu") and fu.CurrentComp) or rawget(_G,"comp"))
+    if not host then error("HOST_COMP: Fusion composition unavailable") end
+    local tag=selected:GetData("CartoRigAtomic.IdentityV2")
+    if type(tag)~="table" or tag.role~="control" then
+        error("OBJECT_ID: Region Control is unavailable")
+    end
+    local scene=host:GetData("CartoRigAtomic.SceneV2")
+    if type(scene)~="table" or scene.sceneId~=tag.sceneId then
+        error("SCENE_CONTEXT: Current Fusion composition changed")
+    end
+    local valid=false
+    for _,obj in ipairs(scene.objects or {}) do
+        if obj.id==tag.objectId then
+            if obj.kind~="Region" then
+                error("INCOMPATIBLE_OBJECT: Border Draw applies only to Region")
+            end
+            if obj.locked or obj.visible==false then
+                error("LOCKED: Region must be visible and unlocked")
+            end
+            valid=true
+            break
+        end
+    end
+    if not valid then error("OBJECT_MISSING: Region was deleted") end
+    local items=selected:GetData("CartoRigAtomic.RegionStrokeSegmentsV2")
+    if type(items)~="table" or #items<1 then
+        error("GEOMETRY_REQUIRED: No visible Region contour segments")
+    end
+    local now=tonumber(host.CurrentTime)
+    local duration=tonumber(selected:GetInput("CR2BorderDuration"))
+    local attrs=host:GetAttrs()
+    if not now or now<0 or now%1~=0 or not duration or
+       duration<1 or duration>10000 or duration%1~=0 or
+       not attrs or not tonumber(attrs.COMPN_RenderEnd) or
+       now+duration>tonumber(attrs.COMPN_RenderEnd) then
+        error("FRAME_OUT_OF_RANGE: Invalid Region Border Draw interval")
+    end
+    local total=0
+    local parts={}
+    for _,entry in ipairs(items) do
+        local length=tonumber(entry.length)
+        if not length or length<=0 then
+            error("GEOMETRY_REQUIRED: Empty Region polygon contour")
+        end
+        local found
+        for _,candidate in pairs(host:GetToolList(false) or {}) do
+            local ok,identity=pcall(function()
+                return candidate:GetData("CartoRigAtomic.IdentityV2")
+            end)
+            if ok and type(identity)=="table" and
+               identity.sceneId==tag.sceneId and
+               identity.objectId==tag.objectId and
+               identity.role==entry.role then
+                found=candidate
+                break
+            end
+        end
+        if not found or not found.WriteLength then
+            error("HOST_GRAPH: Region contour mask is unavailable")
+        end
+        local ok,connected=pcall(function()
+            return found.WriteLength:GetConnectedOutput()
+        end)
+        if not ok or connected then
+            error("MOTION_CONFLICT: Stroke Progress already animated")
+        end
+        parts[#parts+1]={tool=found,length=length}
+        total=total+length
+    end
+    host:StartUndo("CartoRig: MO-REG-05 Border Draw")
+    local success,reason=pcall(function()
+        local consumed=0
+        for _,entry in ipairs(parts) do
+            local first=now+math.floor(duration*(consumed/total)+.5)
+            consumed=consumed+entry.length
+            local last=now+math.floor(duration*(consumed/total)+.5)
+            if not entry.tool:AddModifier("WriteLength","BezierSpline") then
+                error("HOST_ANIMATION: Region contour cannot be animated")
+            end
+            -- For a ring shorter than one output frame, use adjacent integer
+            -- samples; never collapse two different keys onto one frame.
+            if last<=first then
+                last=math.min(now+duration,first+1)
+                first=math.max(now,last-1)
+            end
+            entry.tool:SetInput("WriteLength",0,now)
+            if first>now then entry.tool:SetInput("WriteLength",0,first) end
+            entry.tool:SetInput("WriteLength",1,last)
+            if last<now+duration then
+                entry.tool:SetInput("WriteLength",1,now+duration)
+            end
+        end
+        selected:SetData("CartoRigAtomic.MotionBorderV2",{
+            schemaVersion=2,presetId="MO-REG-05",channel="Stroke Progress",
+            startFrame=now,endFrame=now+duration,state="ANIMATED_PRESET"
+        })
+    end)
+    host:EndUndo(success)
+    if not success then error(reason) end
+end
+local ok,reason=pcall(apply)
+if not ok then print("CartoRig Border Draw: "..tostring(reason)) end
+]==]
+end
+
 local function attach_inspector_motion(tool, kind)
     if kind~="Marker" and kind~="Label" and kind~="Camera" and
         kind~="Region" and kind~="Route" then
@@ -415,6 +527,19 @@ local function attach_inspector_motion(tool, kind)
             LINKID_DataType="Number",INPID_InputControl="ButtonControl",
             ICS_ControlPage="Motion",INP_External=false,
             BTNCS_Execute=region_color_callback(true)
+        }
+        controls.CR2BorderDuration={
+            LINKS_Name="Border Draw Duration (Frames)",
+            LINKID_DataType="Number",INPID_InputControl="SliderControl",
+            ICS_ControlPage="Motion",INP_Integer=true,
+            INP_Default=36,INP_MinScale=1,INP_MaxScale=300,
+            INP_External=false
+        }
+        controls.CR2MotionBorderDraw={
+            LINKS_Name="Apply MO-REG-05 Border Draw",
+            LINKID_DataType="Number",INPID_InputControl="ButtonControl",
+            ICS_ControlPage="Motion",INP_External=false,
+            BTNCS_Execute=region_border_callback()
         }
         controls.CR2MotionFadeOut={
             LINKS_Name="Apply MO-REG-02 Fade Out",
