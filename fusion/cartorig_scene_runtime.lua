@@ -94,6 +94,28 @@ local function cartorig_apply()
         error("OBJECT_ID: selected tool is not an authored CartoRig object")
     end
     local kind = "%%KIND%%"
+    local scene=host:GetData("CartoRigAtomic.SceneV2")
+    if type(scene)~="table" or scene.sceneId~=identity.sceneId then
+        error("SCENE_CONTEXT: Authored scene does not match selected Fusion tool")
+    end
+    if kind~="Camera" then
+        local found=false
+        for _,obj in ipairs(scene.objects or {}) do
+            if obj.id==identity.objectId then
+                found=true
+                if obj.locked then
+                    error("LOCKED: Unlock this object in Scene before applying Motion")
+                end
+                if obj.visible==false then
+                    error("HIDDEN: Show this object before applying Motion")
+                end
+                break
+            end
+        end
+        if not found then
+            error("OBJECT_ID: Selected object was removed from CartoRig Scene")
+        end
+    end
     local duration = tonumber(selected:GetInput("CR2MotionDuration"))
     local now = tonumber(host.CurrentTime)
     if not now or now%1~=0 or now<0 then
