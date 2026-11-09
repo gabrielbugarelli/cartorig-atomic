@@ -2,6 +2,7 @@
 -- Menu entry lives in Fusion Scripts > Comp after installation.
 -- The build system embeds the original cartorig_scene_runtime.lua at this marker.
 local Runtime = @@EMBED_RUNTIME@@
+local Geo = @@EMBED_CATALOG@@
 
 local fusionApp = rawget(_G, "fu") or rawget(_G, "fusion")
 local bmdApi = rawget(_G, "bmd")
@@ -32,11 +33,36 @@ local window = dispatcher:AddWindow({
         ui:Button{ ID = "Refresh", Text = "Refresh" },
         ui:Button{ ID = "Create", Text = "Create Scene" }
     },
+    ui:Label{ Text = "FIND OFFLINE LOCATION" },
+    ui:HGroup{
+        ui:LineEdit{ ID = "Search", Text = "" },
+        ui:Button{ ID = "SearchButton", Text = "Search" }
+    },
+    ui:Combo{ ID = "LocationFilter" },
+    ui:Combo{ ID = "SearchResults" },
+    ui:Label{ ID = "LocationDetail", Text = "Enter a location name to search the installed index." },
+    ui:HGroup{
+        ui:Button{ ID = "AddFoundMarker", Text = "Add Marker" },
+        ui:Button{ ID = "AddFoundLabel", Text = "Add Label" },
+        ui:Button{ ID = "FocusFound", Text = "Focus Camera" }
+    },
     ui:Label{ Text = "SCENE OBJECTS" },
     ui:Combo{ ID = "Objects" },
+    ui:Button{ ID = "Reveal", Text = "Reveal in Fusion Inspector" },
     ui:HGroup{
-        ui:Button{ ID = "Reveal", Text = "Reveal in Fusion Inspector" },
-        ui:Button{ ID = "FadeIn", Text = "Motion: Fade In" }
+        ui:Button{ ID = "Rename", Text = "Rename" },
+        ui:Button{ ID = "MoveUp", Text = "Move Up" },
+        ui:Button{ ID = "MoveDown", Text = "Move Down" }
+    },
+    ui:HGroup{
+        ui:Button{ ID = "Show", Text = "Show" },
+        ui:Button{ ID = "Hide", Text = "Hide" },
+        ui:Button{ ID = "Lock", Text = "Lock" },
+        ui:Button{ ID = "Unlock", Text = "Unlock" }
+    },
+    ui:HGroup{
+        ui:Button{ ID = "Group", Text = "Group Selected" },
+        ui:Button{ ID = "Delete", Text = "Delete (Confirm)" }
     },
     ui:Label{ Text = "ADD GEOANCHORED OBJECT" },
     ui:Label{ Text = "Name" },
@@ -61,13 +87,6 @@ local window = dispatcher:AddWindow({
         ui:LineEdit{ ID = "Zoom", Text = "1" },
         ui:Button{ ID = "Focus", Text = "Focus on Coordinates" }
     },
-    ui:Label{ Text = "MOTION" },
-    ui:HGroup{
-        ui:Label{ Text = "Start frame" },
-        ui:LineEdit{ ID = "StartFrame", Text = "0" },
-        ui:Label{ Text = "Duration" },
-        ui:LineEdit{ ID = "Duration", Text = "20" }
-    },
     ui:Label{ ID = "Feedback", Text = "Ready. All edits use Fusion Undo." },
     ui:Button{ ID = "Close", Text = "Close Scene" }
 })
@@ -80,6 +99,27 @@ end
 local items = window:GetItems()
 local binding = nil
 local choices = {}
+local matching = {}
+local catalog = nil
+local dataIssue = nil
+local selectedObjectId = nil
+local pendingDelete = nil
+
+local scriptLocation = debug.getinfo(1, "S").source
+local scriptFolder = scriptLocation and
+    scriptLocation:match("^@(.+[\\/])[^\\/]+$")
+if scriptFolder then
+    local dataPath = scriptFolder .. "CartoRigAtomic_Data" ..
+        package.config:sub(1, 1) .. "places.tsv"
+    local ok, loaded = pcall(Geo.from_file, dataPath)
+    if ok then catalog = loaded else dataIssue = tostring(loaded) end
+else
+    dataIssue = "CATALOG_PATH: Resolve did not expose an installed script directory."
+end
+for _, option in ipairs({ "All", "Country", "State", "City", "Continent" }) do
+    items.LocationFilter:AddItem(option)
+end
+items.LocationFilter.CurrentIndex = 0
 
 local function current_comp()
     -- Never fall back to the first composition when a different composition
@@ -124,14 +164,31 @@ local function sync()
     end
     binding = current
     items.State.Text = "State: " .. state.state
-    for _, object in ipairs(state.objects) do
+    local groups = {}
+    for _, group in ipairs(state.groups or {}) do groups[group.id] = group.name end
+    local selectIndex = 0
+    for i, object in ipairs(state.objects) do
         choices[#choices+1] = object.id
-        items.Objects:AddItem(object.kind .. " — " .. object.name)
+        local prefix = object.groupId and
+            ("[" .. tostring(groups[object.groupId] or "Group") .. "] ") or ""
+        local suffix = object.locked and " [Locked]" or
+            (object.visible == false and " [Hidden]" or "")
+        items.Objects:AddItem(prefix .. object.kind .. " — " .. object.name .. suffix)
+        if object.id == selectedObjectId then selectIndex = i - 1 end
     end
     if #choices == 0 then
+        selectedObjectId = nil
         items.Objects:AddItem("No authored objects")
+    else
+        items.Objects.CurrentIndex = selectIndex
+        selectedObjectId = choices[selectIndex + 1]
     end
-    feedback("Scene synchronized. Select a CartoRig object to edit.")
+    if dataIssue then
+        feedback(dataIssue)
+    else
+        feedback("Scene synchronized. Offline catalog: " ..
+            tostring(catalog and catalog.count or 0) .. " places.")
+    end
 end
 
 local function require_current()
@@ -148,6 +205,7 @@ local function selected_id()
     if not id then
         error("NO_SELECTION: Select a CartoRig object.", 0)
     end
+    selectedObjectId = id
     return id
 end
 
@@ -160,6 +218,7 @@ local function handle(action)
         feedback(label_error(result))
         return
     end
+    if type(result) == "string" then selectedObjectId = result end
     sync()
     if type(result) == "string" then
         feedback("Success: " .. result)
@@ -207,11 +266,145 @@ function window.On.Reveal.Clicked(_)
     handle(function(comp) return Runtime.select(comp, selected_id()) end)
 end
 
-function window.On.FadeIn.Clicked(_)
+
+local function current_match()
+    if not catalog then
+        error(dataIssue or "CATALOG_MISSING: Offline data is unavailable", 0)
+    end
+    local index = tonumber(items.SearchResults.CurrentIndex) or -1
+    local row = matching[index + 1]
+    if not row then error("NO_RESULT: Select a real location from Search Results", 0) end
+    return row
+end
+
+local function run_search()
+    matching = {}
+    items.SearchResults:Clear()
+    items.LocationDetail.Text = "No location selected"
+    if not catalog then
+        feedback(dataIssue or "CATALOG_MISSING: Offline data is unavailable.")
+        return
+    end
+    local filterIndex = tonumber(items.LocationFilter.CurrentIndex) or 0
+    local types = { "All", "Country", "State", "City", "Continent" }
+    local filter = types[filterIndex + 1] or "All"
+    matching = catalog:search(items.Search.Text, filter, 40)
+    for _, row in ipairs(matching) do
+        local parent = row.parent ~= "" and row.parent or row.country
+        items.SearchResults:AddItem(
+            row.name .. " — " .. row.kind .. " — " .. parent)
+    end
+    if #matching == 0 then
+        items.SearchResults:AddItem("No location found in offline data")
+        feedback("NO_MATCH: Refine the search or clear the filter.")
+    else
+        items.SearchResults.CurrentIndex = 0
+        feedback(tostring(#matching) ..
+            " matching locations. Search alone does not change the Scene.")
+    end
+end
+
+local function action_for_result(operation)
     handle(function(comp)
-        return Runtime.fade_in(comp, selected_id(),
-            items.StartFrame.Text, items.Duration.Text)
+        local row = current_match()
+        if not row.point then
+            error("NO_POINT: " .. row.kind ..
+                " has polygon data, not a city point. Choose a point.",
+                0)
+        end
+        if operation == "marker" then
+            return Runtime.add_marker(comp, row.name,
+                row.point.lon, row.point.lat)
+        elseif operation == "label" then
+            return Runtime.add_label(comp, row.name,
+                row.point.lon, row.point.lat)
+        else
+            return Runtime.focus(comp,
+                row.point.lon, row.point.lat, items.Zoom.Text)
+        end
     end)
+end
+
+function window.On.SearchButton.Clicked(_)
+    run_search()
+end
+
+function window.On.LocationFilter.CurrentIndexChanged(_)
+    if items.Search.Text ~= "" then run_search() end
+end
+
+function window.On.SearchResults.CurrentIndexChanged(_)
+    local index = tonumber(items.SearchResults.CurrentIndex) or -1
+    local row = matching[index + 1]
+    if not row then return end
+    local geometry = row.point and "Point (WGS84)" or
+        "Administrative region (polygon data, renderer pending)"
+    items.LocationDetail.Text = row.name .. " — " .. row.kind ..
+        " — " .. row.country .. " — " .. geometry
+end
+
+function window.On.AddFoundMarker.Clicked(_)
+    action_for_result("marker")
+end
+
+function window.On.AddFoundLabel.Clicked(_)
+    action_for_result("label")
+end
+
+function window.On.FocusFound.Clicked(_)
+    action_for_result("focus")
+end
+
+function window.On.Rename.Clicked(_)
+    handle(function(comp)
+        return Runtime.rename(comp, selected_id(), items.Name.Text)
+    end)
+end
+function window.On.MoveUp.Clicked(_)
+    handle(function(comp)
+        return Runtime.move(comp, selected_id(), -1)
+    end)
+end
+function window.On.MoveDown.Clicked(_)
+    handle(function(comp)
+        return Runtime.move(comp, selected_id(), 1)
+    end)
+end
+function window.On.Show.Clicked(_)
+    handle(function(comp)
+        return Runtime.set_visibility(comp, selected_id(), true)
+    end)
+end
+function window.On.Hide.Clicked(_)
+    handle(function(comp)
+        return Runtime.set_visibility(comp, selected_id(), false)
+    end)
+end
+function window.On.Lock.Clicked(_)
+    handle(function(comp)
+        return Runtime.set_lock(comp, selected_id(), true)
+    end)
+end
+function window.On.Unlock.Clicked(_)
+    handle(function(comp)
+        return Runtime.set_lock(comp, selected_id(), false)
+    end)
+end
+function window.On.Group.Clicked(_)
+    handle(function(comp)
+        return Runtime.create_group(comp, items.Name.Text, { selected_id() })
+    end)
+end
+function window.On.Delete.Clicked(_)
+    local ok, id = pcall(selected_id)
+    if not ok then feedback(label_error(id)) return end
+    if pendingDelete ~= id then
+        pendingDelete = id
+        feedback("CONFIRM DELETE: Click Delete again to remove only this CartoRig object.")
+        return
+    end
+    pendingDelete = nil
+    handle(function(comp) return Runtime.remove(comp, id) end)
 end
 
 function window.On.Close.Clicked(_)
