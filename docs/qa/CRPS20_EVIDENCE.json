@@ -5,7 +5,7 @@
   "evidence_note": "Unit tests and synthetic Fuse/Fusion mocks are NOT host acceptance.",
   "host_version": "NOT_OBSERVED",
   "target": "DaVinci Resolve Studio 20 / Windows",
-  "automated_ci_run": "https://github.com/gabrielbugarelli/cartorig-atomic/actions/runs/42582964761",
+  "automated_ci_run": "https://github.com/gabrielbugarelli/cartorig-atomic/actions/runs/42583680453",
   "host": {
     "HOST-01": {
       "status": "NOT_TESTED",
@@ -325,7 +325,7 @@
       "status": "PLANNED_NOT_APPLIED"
     },
     "MO-REG-05": {
-      "status": "PLANNED_NOT_APPLIED"
+      "status": "NATIVE_KEYS_UNVERIFIED_IN_HOST"
     },
     "MO-REG-06": {
       "status": "PLANNED_NOT_APPLIED"
