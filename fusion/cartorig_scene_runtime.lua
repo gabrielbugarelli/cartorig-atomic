@@ -1048,16 +1048,28 @@ local function add_object(comp, kind, name, lon, lat, source)
         if kind == "Marker" then
             source = add_tool(comp, "Background", "CR2_Marker_" .. n,
                 -4, n * 2, scene.sceneId, id, "control")
-            source:SetInput("TopLeftRed", 0.86)
-            source:SetInput("TopLeftGreen", 0.40)
-            source:SetInput("TopLeftBlue", 0.16)
+            -- CR-PS-2.0 Neutral Dark: marker.fill = #E0E8ED.
+            source:SetInput("TopLeftRed", 224/255)
+            source:SetInput("TopLeftGreen", 232/255)
+            source:SetInput("TopLeftBlue", 237/255)
             source:SetInput("TopLeftAlpha", 1.0)
             local mask = add_tool(comp, "EllipseMask", "CR2_Mask_" .. n,
                 -6, n * 2, scene.sceneId, id, "mask")
             local c = coords(lon, lat)
             mask:SetInput("Center", point(c[1], c[2]))
-            mask:SetInput("Width", 0.015)
-            mask:SetInput("Height", 0.015)
+            local renderW,renderH
+            local dimsOk=pcall(function()
+                renderW=tonumber(comp:GetPrefs("Comp.FrameFormat.Width"))
+                renderH=tonumber(comp:GetPrefs("Comp.FrameFormat.Height"))
+            end)
+            if not dimsOk or not renderW or renderW<1 or
+               not renderH or renderH<1 then
+                fail("FRAME_FORMAT","Cannot resolve native Fusion output dimensions")
+            end
+            -- Use a 14px circle in the current output format; editing
+            -- the resolution afterward requires size re-evaluation.
+            mask:SetInput("Width", 14/renderW)
+            mask:SetInput("Height", 14/renderH)
             checked_link(source, "EffectMask", mask)
         elseif kind == "Label" then
             source = add_tool(comp, "TextPlus", "CR2_Label_" .. n,
