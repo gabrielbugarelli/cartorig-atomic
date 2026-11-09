@@ -106,7 +106,8 @@ local window = dispatcher:AddWindow({
     ui:HGroup{
         ui:Label{ Text = "Zoom" },
         ui:LineEdit{ ID = "Zoom", Text = "1" },
-        ui:Button{ ID = "Focus", Text = "Focus on Coordinates" }
+        ui:Button{ ID = "Focus", Text = "Focus Point" },
+        ui:Button{ ID = "SetZoom", Text = "Set Zoom" }
     },
     ui:Label{ ID = "Feedback", Text = "Ready. All edits use Fusion Undo." },
     ui:Button{ ID = "Close", Text = "Close Scene" }
@@ -309,7 +310,13 @@ end
 function window.On.Focus.Clicked(_)
     handle(function(comp)
         return Runtime.focus(comp, items.Longitude.Text,
-            items.Latitude.Text, items.Zoom.Text)
+            items.Latitude.Text)
+    end)
+end
+
+function window.On.SetZoom.Clicked(_)
+    handle(function(comp)
+        return Runtime.set_zoom(comp, items.Zoom.Text)
     end)
 end
 
@@ -371,7 +378,7 @@ local function action_for_result(operation)
                 row.point.lon, row.point.lat, row)
         else
             return Runtime.focus(comp,
-                row.point.lon, row.point.lat, items.Zoom.Text)
+                row.point.lon, row.point.lat)
         end
     end)
 end
