@@ -856,8 +856,17 @@ local function follow()
         if not route:AddModifier("CR2FollowerProgress","BezierSpline") then
             error("HOST_ANIMATION: Cannot animate native Follower Progress")
         end
-        route:SetInput("CR2FollowerProgress",0,start)
-        route:SetInput("CR2FollowerProgress",1,start+duration)
+        local output=route.CR2FollowerProgress:GetConnectedOutput()
+        local spline=output and output:GetTool()
+        if not spline or not spline.SetKeyFrames then
+            error("HOST_SPLINE: Route progress requires native BezierSpline")
+        end
+        if spline:SetKeyFrames({
+            [start]={0,Flags={Linear=true}},
+            [start+duration]={1,Flags={Linear=true}}
+        },true)==false then
+            error("HOST_SPLINE: Cannot set linear cumulative-distance progress")
+        end
         route:SetData("CartoRigAtomic.MotionFollowerV2",{
             schemaVersion=2,presetId="MO-RTE-03",
             channel="Follower Progress",
