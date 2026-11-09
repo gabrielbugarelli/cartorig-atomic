@@ -843,4 +843,78 @@ expect(flyCamera.animations.Size[145]==4,
        "re-applying Fly To does not overwrite existing Zoom/position keys")
 _G.tool,_G.comp=savedFlyTool,savedFlyComp
 
+
+-- Fit uses the minimum circular longitude interval and explicit WGS84
+-- extents; no auto marker, centroid or motion is introduced.
+local fitPoint=runtime.compute_fit({
+    {id="ne10m:city:sp",kind="City",
+     point={lon=-46.6333,lat=-23.5505}}
+},.1)
+expect(math.abs(fitPoint.longitude+46.6333)<1e-7 and
+       math.abs(fitPoint.latitude+23.5505)<1e-7 and
+       fitPoint.zoom==4,
+       "single City uses source geoanchor and documented 4x point reference")
+local fitCross=runtime.compute_fit({
+    {id="ne10m:city:east",kind="City",point={lon=179,lat=0}},
+    {id="ne10m:city:west",kind="City",point={lon=-179,lat=1}}
+},.1)
+expect(math.abs(fitCross.longitude-180)<1e-7 and
+       math.abs(fitCross.longitudeSpanDegrees-2)<1e-7,
+       "Fit treats dateline cities as two degrees apart, not 358")
+local islandFit=runtime.compute_fit({
+    {id="ne10m:state:dateline",kind="State",
+     geometry={id="ne10m:state:dateline",rings={
+         {kind="O",vertices={
+             {lon=179,lat=0},{lon=180,lat=0},{lon=180,lat=1}}},
+         {kind="O",vertices={
+             {lon=-180,lat=0},{lon=-179,lat=0},{lon=-179,lat=1}}}
+     }}}
+},.1)
+expect(islandFit.longitudeSpanDegrees<=2.01 and
+       islandFit.latitudeSpanDegrees==1,
+       "multipart Region Fit includes both dateline islands without world-spanning bounds")
+local wideFit=runtime.compute_fit({
+    {id="ne10m:country:west",kind="Country",
+     geometry={id="ne10m:country:west",rings={
+         {kind="O",vertices={
+             {lon=-80,lat=-40},{lon=-20,lat=-40},{lon=-20,lat=10}}}
+     }}},
+    {id="ne10m:country:east",kind="Country",
+     geometry={id="ne10m:country:east",rings={
+         {kind="O",vertices={
+             {lon=0,lat=-5},{lon=80,lat=-5},{lon=80,lat=45}}}
+     }}}
+},.1)
+expect(wideFit.longitudeSpanDegrees==160 and
+       wideFit.latitudeSpanDegrees==85 and
+       wideFit.zoom>1 and wideFit.zoom<3,
+       "Fit across multiple countries respects full extent and padding")
+expect_failure(function()runtime.compute_fit({},.1)end,"FIT_TARGET_REQUIRED")
+expect_failure(function()runtime.compute_fit({
+    {id="ne10m:city:sp",point={lon=-46,lat=-23}}},.5)
+end,"INVALID_PADDING")
+expect_failure(function()runtime.compute_fit({
+    {id="ne10m:state:missing",kind="State"}
+},.1)end,"FIT_TARGET_REQUIRED")
+expect_failure(function()runtime.compute_fit({
+    {id="ne10m:state:one",kind="State",
+     geometry={id="ne10m:state:two",rings=statePolygon.rings}}
+},.1)end,"NO_GEOMETRY")
+
+local fitComp=new_comp()
+fitComp:AddTool("MediaOut")
+runtime.create(fitComp)
+local fitScene=fitComp:GetData("CartoRigAtomic.SceneV2")
+local fitCamera=find(fitComp,fitScene.cameraId,"camera")
+runtime.set_fit_target(fitComp,{
+    {id="ne10m:city:east",kind="City",point={lon=179,lat=0}},
+    {id="ne10m:city:west",kind="City",point={lon=-179,lat=1}}
+},.1)
+local targetPose=fitCamera:GetData("CartoRigAtomic.CameraFitTargetV2")
+expect(#targetPose.featureIds==2 and
+       targetPose.projection=="Equirectangular",
+       "Fit Target persists explicit source identities and projection")
+expect(next(fitCamera.animations)==nil,
+       "choosing Fit Targets does not generate any automatic keyframes")
+
 print("PASS: " .. checks .. " original Fusion graph / Control / Motion assertions")
