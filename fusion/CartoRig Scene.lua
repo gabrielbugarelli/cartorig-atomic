@@ -314,10 +314,10 @@ local function action_for_result(operation)
         end
         if operation == "marker" then
             return Runtime.add_marker(comp, row.name,
-                row.point.lon, row.point.lat)
+                row.point.lon, row.point.lat, row)
         elseif operation == "label" then
             return Runtime.add_label(comp, row.name,
-                row.point.lon, row.point.lat)
+                row.point.lon, row.point.lat, row)
         else
             return Runtime.focus(comp,
                 row.point.lon, row.point.lat, items.Zoom.Text)
