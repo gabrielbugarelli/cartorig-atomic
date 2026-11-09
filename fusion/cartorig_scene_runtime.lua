@@ -269,6 +269,96 @@ if not ok then print("CartoRig Motion: "..tostring(err)) end
     return code:gsub("%%%%KIND%%%%", selectedKind)
 end
 
+-- A Region's fill RGBA channels are actual native Background inputs. These
+-- callbacks make no style edits outside this object's Fill Color.
+local function region_color_callback(instant)
+    local text=[==[
+local function cartorig_color()
+    local obj=tool
+    local host=obj and (obj.Comp or (rawget(_G,"fu") and fu.CurrentComp)
+        or rawget(_G,"comp"))
+    if not host then error("HOST_COMP: Fusion composition unavailable") end
+    local tag=obj:GetData("CartoRigAtomic.IdentityV2")
+    if type(tag)~="table" or tag.role~="control" then
+        error("OBJECT_ID: Region Control identity not found")
+    end
+    local scene=host:GetData("CartoRigAtomic.SceneV2")
+    if type(scene)~="table" or scene.sceneId~=tag.sceneId then
+        error("SCENE_CONTEXT: Fusion composition changed")
+    end
+    local owned=false
+    for _,entry in ipairs(scene.objects or {}) do
+        if entry.id==tag.objectId then
+            owned=true
+            if entry.kind~="Region" then error("INCOMPATIBLE_OBJECT: Not a Region") end
+            if entry.locked or entry.visible==false then
+                error("LOCKED: Region must be visible and unlocked")
+            end
+            break
+        end
+    end
+    if not owned then error("OBJECT_MISSING: Region no longer belongs to Scene") end
+    if tonumber(obj:GetInput("CR2ColorChosen"))~=1 then
+        error("TARGET_REQUIRED: Choose and confirm a target RGBA fill")
+    end
+    local isInstant=%%INSTANT%%
+    local now=tonumber(host.CurrentTime)
+    local duration=tonumber(obj:GetInput("CR2MotionDuration"))
+    local endFrame=isInstant and now or now+duration
+    local attrs=host:GetAttrs()
+    if not now or now%1~=0 or now<0 or
+        not duration or duration%1~=0 or duration<1 or
+        not attrs or not tonumber(attrs.COMPN_RenderEnd) or
+        endFrame>tonumber(attrs.COMPN_RenderEnd) then
+        error("FRAME_OUT_OF_RANGE: Motion must stay within the Fusion composition")
+    end
+    local channels={"TopLeftRed","TopLeftGreen","TopLeftBlue","TopLeftAlpha"}
+    local targetNames={"CR2TargetRed","CR2TargetGreen","CR2TargetBlue","CR2TargetAlpha"}
+    local source,target={},{}
+    for i,channel in ipairs(channels) do
+        local port=obj[channel]
+        if not port then error("HOST_CHANNEL: Missing Fill Color component") end
+        local ok,connected=pcall(function()return port:GetConnectedOutput()end)
+        if not ok or connected then
+            error("MOTION_CONFLICT: Fill Color channel is already animated")
+        end
+        source[i]=tonumber(obj:GetInput(channel))
+        target[i]=tonumber(obj:GetInput(targetNames[i]))
+        if not source[i] or not target[i] or target[i]<0 or target[i]>1 then
+            error("INVALID_COLOR: RGBA must be within 0..1")
+        end
+    end
+    local preset=isInstant and "MO-REG-04" or "MO-REG-03"
+    host:StartUndo("CartoRig: "..preset)
+    local completed,reason=pcall(function()
+        for i,channel in ipairs(channels) do
+            if not obj:AddModifier(channel,"BezierSpline") then
+                error("HOST_ANIMATION: Cannot animate Region Fill Color")
+            end
+            if isInstant then
+                if now>0 then obj:SetInput(channel,source[i],now-1) end
+                obj:SetInput(channel,target[i],now)
+            else
+                obj:SetInput(channel,source[i],now)
+                obj:SetInput(channel,target[i],endFrame)
+            end
+        end
+        local binding={
+            presetId=preset,channels=channels,
+            startFrame=now,endFrame=endFrame,
+            schemaVersion=2,state="ANIMATED_PRESET"
+        }
+        obj:SetData("CartoRigAtomic.MotionBindingV2",binding)
+    end)
+    host:EndUndo(completed)
+    if not completed then error(reason) end
+end
+local ok,why=pcall(cartorig_color)
+if not ok then print("CartoRig Region Color: "..tostring(why)) end
+]==]
+    return text:gsub("%%%%INSTANT%%%%",instant and "true" or "false")
+end
+
 local function attach_inspector_motion(tool, kind)
     if kind~="Marker" and kind~="Label" and kind~="Camera" and
         kind~="Region" and kind~="Route" then
@@ -296,6 +386,36 @@ local function attach_inspector_motion(tool, kind)
         }
     }
     if kind=="Region" then
+        -- Target is only acted upon when the editor explicitly opts in.
+        controls.CR2ColorChosen={
+            LINKS_Name="Use Target Fill Color",
+            LINKID_DataType="Number",INPID_InputControl="CheckboxControl",
+            ICS_ControlPage="Motion",INP_Integer=true,
+            INP_Default=0,INP_External=false
+        }
+        for index,channel in ipairs({"Red","Green","Blue","Alpha"}) do
+            controls["CR2Target"..channel]={
+                LINKS_Name=index==1 and "Target Fill RGBA" or
+                    ("Target "..channel),
+                LINKID_DataType="Number",INPID_InputControl="ColorControl",
+                ICS_ControlPage="Motion",
+                IC_ControlGroup=4,IC_ControlID=index-1,
+                INP_Default=index==4 and 1 or 0,
+                INP_External=false
+            }
+        end
+        controls.CR2MotionColorChange={
+            LINKS_Name="Apply MO-REG-03 Color Transition",
+            LINKID_DataType="Number",INPID_InputControl="ButtonControl",
+            ICS_ControlPage="Motion",INP_External=false,
+            BTNCS_Execute=region_color_callback(false)
+        }
+        controls.CR2MotionInstantColor={
+            LINKS_Name="Apply MO-REG-04 Instant Color",
+            LINKID_DataType="Number",INPID_InputControl="ButtonControl",
+            ICS_ControlPage="Motion",INP_External=false,
+            BTNCS_Execute=region_color_callback(true)
+        }
         controls.CR2MotionFadeOut={
             LINKS_Name="Apply MO-REG-02 Fade Out",
             LINKID_DataType="Number",INPID_InputControl="ButtonControl",
