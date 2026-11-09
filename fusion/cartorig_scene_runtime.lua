@@ -848,6 +848,7 @@ function M.add_region(comp, feature, geometry)
         attach_inspector_motion(fill,"Region")
         local previousMask
         local previousStroke
+        local strokeSegments={}
         for i,ring in ipairs(geometry.rings) do
             if type(ring.vertices)~="table" then
                 fail("GEOMETRY_FORMAT","Polygon has no vertices")
@@ -859,14 +860,27 @@ function M.add_region(comp, feature, geometry)
             local stroke=make_mask(comp,scene,id,#geometry.rings+i,
                 ring.vertices,true,1.5/1920,"Add")
             if stroke:SetInput("Solid",0)==false or
-               stroke:SetInput("BorderWidth",1.5/1920)==false then
-                fail("HOST_MASK","Region stroke width is unavailable")
+               stroke:SetInput("BorderWidth",1.5/1920)==false or
+               stroke:SetInput("WriteLength",1)==false then
+                fail("HOST_MASK","Region stroke width/progress is unavailable")
             end
+            local length=0
+            for p=1,#ring.vertices do
+                local a=ring.vertices[p]
+                local b=ring.vertices[p % #ring.vertices+1]
+                local dx,dy=(b.lon-a.lon)/360,(b.lat-a.lat)/180
+                length=length+math.sqrt(dx*dx+dy*dy)
+            end
+            strokeSegments[#strokeSegments+1]={
+                role="shape"..tostring(#geometry.rings+i),
+                length=length,kind=ring.kind
+            }
             if previousStroke then
                 checked_link(stroke,"EffectMask",previousStroke)
             end
             previousStroke=stroke
         end
+        fill:SetData("CartoRigAtomic.RegionStrokeSegmentsV2",strokeSegments)
         checked_link(fill,"EffectMask",previousMask)
         local border=add_tool(comp,"Background","CR2_RegionBorder_"..n,
             -2,n*2,scene.sceneId,id,"border")
