@@ -1104,6 +1104,8 @@ function M.inspect(comp)
             id = obj.id, kind = obj.kind, name = obj.name,
             lon = obj.lon, lat = obj.lat, visible = obj.visible ~= false,
             locked = obj.locked == true, groupId = obj.groupId,
+            followerMarkerId = obj.followerMarkerId,
+            followingRouteId = obj.followingRouteId,
             sourceRef = copy_table(obj.sourceRef)
         }
     end
@@ -1691,6 +1693,113 @@ function M.add_route(comp,origin,arrival,details)
     end)
 end
 
+function M.link_follower(comp,routeId,markerId)
+    local scene=require_scene(comp)
+    validate_graph(comp,scene)
+    local _,routeEntry=object_index(scene,routeId)
+    local _,markerEntry=object_index(scene,markerId)
+    if routeEntry.kind~="Route" or markerEntry.kind~="Marker" then
+        fail("FOLLOWER_REQUIRED","Select an authored Route and existing Marker")
+    end
+    if routeEntry.locked or markerEntry.locked then
+        fail("LOCKED","Route and Marker must be unlocked to link")
+    end
+    if routeEntry.followerMarkerId then
+        fail("FOLLOWER_CONFLICT","Route already has a selected follower")
+    end
+    if markerEntry.followingRouteId then
+        fail("FOLLOWER_CONFLICT","Marker already follows another Route")
+    end
+    local route=object_tool(comp,scene,routeId,"control")
+    local markerMask=object_tool(comp,scene,markerId,"mask")
+    if not route or not markerMask or not markerMask.Center then
+        fail("HOST_GRAPH","Required Route/Marker native Control is missing")
+    end
+    local samples=route:GetData("CartoRigAtomic.RoutePolylineV2")
+    local routeName
+    local attrsOk,attrs=pcall(function()return route:GetAttrs()end)
+    if attrsOk and type(attrs)=="table" then
+        routeName=attrs.TOOLS_Name
+    end
+    local expression=follower_expression(samples,routeName)
+    local existingOk,existing=pcall(function()
+        return markerMask.Center:GetConnectedOutput()
+    end)
+    local exprOk,otherExpression=pcall(function()
+        return markerMask.Center:GetExpression()
+    end)
+    if not existingOk or not exprOk then
+        fail("HOST_GRAPH","Cannot inspect Marker Center state")
+    end
+    if existing or (otherExpression and otherExpression~="") then
+        fail("FOLLOWER_CONFLICT","Marker Center already has animation/expression")
+    end
+    return undo(comp,"CartoRig: Link Route Follower",function()
+        if markerMask.Center:SetExpression(expression)==false then
+            fail("HOST_FOLLOWER","Fusion rejected Route follower position expression")
+        end
+        markerMask:SetData("CartoRigAtomic.FollowerLinkV2",{
+            schemaVersion=2,routeId=routeId,markerId=markerId,
+            anchorLon=markerEntry.lon,anchorLat=markerEntry.lat,
+            expression=expression
+        })
+        route:SetData("CartoRigAtomic.RouteFollowerV2",{
+            schemaVersion=2,routeId=routeId,markerId=markerId,
+            visibility="Independent",orientToTangent=false
+        })
+        routeEntry.followerMarkerId=markerId
+        markerEntry.followingRouteId=routeId
+        comp:SetData(SCENE_KEY,scene)
+        return true
+    end)
+end
+
+function M.unlink_follower(comp,routeId)
+    local scene=require_scene(comp)
+    validate_graph(comp,scene)
+    local _,routeEntry=object_index(scene,routeId)
+    if routeEntry.kind~="Route" or not routeEntry.followerMarkerId then
+        fail("FOLLOWER_MISSING","Route has no linked follower")
+    end
+    if routeEntry.locked then
+        fail("LOCKED","Unlock Route before removing its follower")
+    end
+    local markerId=routeEntry.followerMarkerId
+    local _,markerEntry=object_index(scene,markerId)
+    if markerEntry.locked or markerEntry.followingRouteId~=routeId then
+        fail("FOLLOWER_CONFLICT","Follower ownership is inconsistent or locked")
+    end
+    local mask=object_tool(comp,scene,markerId,"mask")
+    local route=object_tool(comp,scene,routeId,"control")
+    if not mask or not route or not mask.Center then
+        fail("HOST_GRAPH","Cannot unlink missing Fusion mask or route")
+    end
+    local link=mask:GetData("CartoRigAtomic.FollowerLinkV2")
+    if type(link)~="table" or link.routeId~=routeId or
+       link.markerId~=markerId then
+        fail("FOLLOWER_CONFLICT","Follower link metadata is inconsistent")
+    end
+    local ok,expression=pcall(function()return mask.Center:GetExpression()end)
+    if not ok or expression~=link.expression then
+        fail("FOLLOWER_CUSTOMIZED",
+            "Marker Center expression was edited; do not overwrite manual work")
+    end
+    local longitude,latitude=validate_position(link.anchorLon,link.anchorLat)
+    local normalized=coords(longitude,latitude)
+    return undo(comp,"CartoRig: Unlink Route Follower",function()
+        if mask.Center:SetExpression(nil)==false then
+            fail("HOST_FOLLOWER","Could not clear Route follower expression")
+        end
+        mask:SetInput("Center",point(normalized[1],normalized[2]))
+        mask:SetData("CartoRigAtomic.FollowerLinkV2",nil)
+        route:SetData("CartoRigAtomic.RouteFollowerV2",nil)
+        routeEntry.followerMarkerId=nil
+        markerEntry.followingRouteId=nil
+        comp:SetData(SCENE_KEY,scene)
+        return true
+    end)
+end
+
 local function ensure_unlocked(object)
     if object.locked then
         fail("LOCKED", "Unlock " .. object.name .. " before changing it")
@@ -1799,6 +1908,9 @@ function M.remove(comp, objectId)
     validate_graph(comp, scene)
     local index, obj = object_index(scene, objectId)
     ensure_unlocked(obj)
+    if obj.followerMarkerId or obj.followingRouteId then
+        fail("FOLLOWER_LINK_ACTIVE","Unlink Route follower before deleting either object")
+    end
     local control = object_tool(comp, scene, objectId, "control")
     local merge = object_tool(comp, scene, objectId, "merge")
     local mask = object_tool(comp, scene, objectId, "mask")
