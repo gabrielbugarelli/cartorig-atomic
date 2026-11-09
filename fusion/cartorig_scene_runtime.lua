@@ -1538,6 +1538,87 @@ local function route_vertices(origin,destination,style,curvature)
     return segments
 end
 
+-- A normalized cumulative arc-length table is the single spatial source
+-- for Follow Path and its editor-visible geospatial anchor.
+local function route_edges(segments)
+    if type(segments)~="table" or #segments<1 then
+        fail("ROUTE_GEOMETRY","Route has no stored vector path")
+    end
+    local edges,total={},0
+    for _,segment in ipairs(segments) do
+        if type(segment)~="table" or #segment<2 then
+            fail("ROUTE_GEOMETRY","Incomplete stored route segment")
+        end
+        for i=2,#segment do
+            local a,b=segment[i-1],segment[i]
+            local ax,ay=validate_position(a.lon,a.lat)
+            local bx,by=validate_position(b.lon,b.lat)
+            local dx,dy=(bx-ax)/360,(by-ay)/180
+            local distance=math.sqrt(dx*dx+dy*dy)
+            if distance>1e-12 then
+                edges[#edges+1]={
+                    a={lon=ax,lat=ay},b={lon=bx,lat=by},
+                    from=total,to=total+distance,distance=distance
+                }
+                total=total+distance
+            end
+        end
+    end
+    if total<=0 then fail("ROUTE_GEOMETRY","Route has no nonzero path length") end
+    return edges,total
+end
+
+function M.route_point_at(segments,progress)
+    progress=tonumber(progress)
+    if not progress or progress~=progress or progress<0 or progress>1 then
+        fail("INVALID_PROGRESS","Follower Progress must be in 0..1")
+    end
+    local edges,total=route_edges(segments)
+    local length=progress*total
+    local edge=edges[#edges]
+    for _,candidate in ipairs(edges) do
+        if length<=candidate.to then edge=candidate break end
+    end
+    local fraction=(length-edge.from)/edge.distance
+    return {
+        lon=edge.a.lon+(edge.b.lon-edge.a.lon)*fraction,
+        lat=edge.a.lat+(edge.b.lat-edge.a.lat)*fraction
+    }
+end
+
+local function follower_expression(segments,toolName)
+    if type(toolName)~="string" or not toolName:match("^[%a_][%w_]*$") then
+        fail("FOLLOWER_NAME","Native Route tool name cannot be referenced safely")
+    end
+    local edges,total=route_edges(segments)
+    local progress="math.max(0,math.min(1,"..toolName..".CR2FollowerProgress))"
+    local function build(component)
+        local last=edges[#edges].b
+        local expression=string.format("%.11f",
+            component=="X" and (last.lon+180)/360 or (last.lat+90)/180)
+        for i=#edges,1,-1 do
+            local edge=edges[i]
+            local startValue=component=="X" and
+                (edge.a.lon+180)/360 or (edge.a.lat+90)/180
+            local endValue=component=="X" and
+                (edge.b.lon+180)/360 or (edge.b.lat+90)/180
+            local startFrac=edge.from/total
+            local finishFrac=edge.to/total
+            local lengthFrac=finishFrac-startFrac
+            expression=string.format(
+                "iif((%s)<=%.11f,(%.11f+(%.11f)*((%s-%.11f)/%.11f)),%s)",
+                progress,finishFrac,startValue,endValue-startValue,
+                progress,startFrac,lengthFrac,expression)
+        end
+        return expression
+    end
+    local expression="Point("..build("X")..","..build("Y")..")"
+    if #expression>64000 then
+        fail("FOLLOWER_SIZE","Route follower expression exceeds host safety limit")
+    end
+    return expression
+end
+
 function M.add_route(comp,origin,arrival,details)
     details=details or {}
     if type(origin)~="table" or type(arrival)~="table" then
