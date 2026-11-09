@@ -5,17 +5,23 @@ on:
     branches: [feat/fusion-scene-runtime]
     paths:
       - 'fusion/**'
-      - 'tests/fusion_scene_runtime_tests.lua'
+      - 'tests/**'
       - 'tests/test_fusion_package.py'
       - 'tools/package_fusion_scene.py'
+      - 'tools/build_fusion_catalog.py'
+      - 'tools/validate_fusion_catalog.py'
+      - 'tools/requirements-fusion-build.txt'
       - 'install/CartoRigAtomicFusionScene.iss'
       - '.github/workflows/fusion-scene.yml'
   pull_request:
     paths:
       - 'fusion/**'
-      - 'tests/fusion_scene_runtime_tests.lua'
+      - 'tests/**'
       - 'tests/test_fusion_package.py'
       - 'tools/package_fusion_scene.py'
+      - 'tools/build_fusion_catalog.py'
+      - 'tools/validate_fusion_catalog.py'
+      - 'tools/requirements-fusion-build.txt'
       - 'install/CartoRigAtomicFusionScene.iss'
       - '.github/workflows/fusion-scene.yml'
   workflow_dispatch:
@@ -31,7 +37,9 @@ jobs:
       - name: Check original Fusion Lua syntax
         run: |
           luac5.4 -p fusion/cartorig_scene_runtime.lua
+          luac5.4 -p fusion/cartorig_catalog.lua
           lua5.4 tests/fusion_scene_runtime_tests.lua
+          lua5.4 tests/fusion_catalog_tests.lua
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -48,10 +56,35 @@ jobs:
           path: dist/CartoRig Scene.lua
           if-no-files-found: error
 
+  offline-geography:
+    name: Build and validate official Natural Earth offline search pack
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build-time only pyshp dependency
+        run: python -m pip install -r tools/requirements-fusion-build.txt
+      - name: Generate official Natural Earth 10m offline catalog and SHA256 manifest
+        run: python tools/build_fusion_catalog.py --output dist/CartoRigAtomic_Data/places.tsv
+      - name: Validate data authenticity, coverage and identities
+        run: python tools/validate_fusion_catalog.py --catalog dist/CartoRigAtomic_Data/places.tsv --manifest dist/CartoRigAtomic_Data/cartorig-data-manifest.json
+      - name: Validate real search in Lua on the installed asset
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y lua5.4
+          lua5.4 tests/fusion_real_catalog.lua dist/CartoRigAtomic_Data/places.tsv
+      - name: Preserve source provenance and offline data as packaging artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CartoRig-Atomic-Fusion-Offline-Data
+          path: dist/CartoRigAtomic_Data/
+          if-no-files-found: error
+
   windows-installer:
     name: One-click Windows developer installer
     runs-on: windows-latest
-    needs: [host-independent-lua]
+    needs: [host-independent-lua, offline-geography]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -61,6 +94,12 @@ jobs:
         run: python tools/package_fusion_scene.py
       - name: Verify packaged-script contracts on Windows
         run: python -m unittest discover -s tests -p test_fusion_package.py -v
+      - uses: actions/download-artifact@v4
+        with:
+          name: CartoRig-Atomic-Fusion-Offline-Data
+          path: dist/CartoRigAtomic_Data
+      - name: Validate Windows installer includes full offline dataset
+        run: python tools/validate_fusion_catalog.py --catalog dist/CartoRigAtomic_Data/places.tsv --manifest dist/CartoRigAtomic_Data/cartorig-data-manifest.json
       - name: Locate or install Inno Setup 6 on CI
         shell: pwsh
         run: |
