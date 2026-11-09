@@ -2,10 +2,10 @@
   "contract": "CR-PS-2.0",
   "schema": "cartorig-qa-evidence-v1",
   "generated_utc": "2026-11-09",
-  "evidence_note": "Unit tests and synthetic Fuse/Fusion mocks are NOT host acceptance.",
+  "evidence_note": "All 16 Motion command scripts have synthetic Lua host callback coverage; Fusion Inspector/MediaOut/Spline real-host behavior and full Update/Remove semantics remain NOT TESTED. 100% CI success cannot be interpreted as product acceptance.",
   "host_version": "NOT_OBSERVED",
   "target": "DaVinci Resolve Studio 20 / Windows",
-  "automated_ci_run": "https://github.com/gabrielbugarelli/cartorig-atomic/actions/runs/42621191853",
+  "automated_ci_run": "https://github.com/gabrielbugarelli/cartorig-atomic/actions/runs/42625378756",
   "host": {
     "HOST-01": {
       "status": "NOT_TESTED",
@@ -319,10 +319,10 @@
       "status": "NATIVE_KEYS_UNVERIFIED_IN_HOST"
     },
     "MO-REG-03": {
-      "status": "PLANNED_NOT_APPLIED"
+      "status": "NATIVE_KEYS_UNVERIFIED_IN_HOST"
     },
     "MO-REG-04": {
-      "status": "PLANNED_NOT_APPLIED"
+      "status": "NATIVE_KEYS_UNVERIFIED_IN_HOST"
     },
     "MO-REG-05": {
       "status": "NATIVE_KEYS_UNVERIFIED_IN_HOST"
@@ -337,22 +337,22 @@
       "status": "NATIVE_KEYS_UNVERIFIED_IN_HOST"
     },
     "MO-RTE-03": {
-      "status": "PLANNED_NOT_APPLIED"
+      "status": "NATIVE_KEYS_UNVERIFIED_IN_HOST"
     },
     "MO-MRK-01": {
       "status": "NATIVE_KEYS_UNVERIFIED_IN_HOST"
     },
     "MO-MRK-02": {
-      "status": "PLANNED_NOT_APPLIED"
+      "status": "NATIVE_KEYS_UNVERIFIED_IN_HOST"
     },
     "MO-CAM-01": {
-      "status": "PLANNED_NOT_APPLIED"
+      "status": "NATIVE_KEYS_UNVERIFIED_IN_HOST"
     },
     "MO-CAM-02": {
       "status": "NATIVE_KEYS_UNVERIFIED_IN_HOST"
     },
     "MO-CAM-03": {
-      "status": "PLANNED_NOT_APPLIED"
+      "status": "NATIVE_KEYS_UNVERIFIED_IN_HOST"
     },
     "MO-LBL-01": {
       "status": "NATIVE_KEYS_UNVERIFIED_IN_HOST"
