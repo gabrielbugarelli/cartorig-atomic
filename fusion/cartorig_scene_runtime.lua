@@ -74,6 +74,144 @@ local function tagged(tool, sceneId, objectId, role)
     return tool
 end
 
+
+-- A Fusion UserControl button owns its callback.  Unlike UIManager callbacks,
+-- it remains available on the saved tool after CartoRig Scene has been closed.
+-- It writes the host's native BezierSpline.  No external runtime, server or
+-- simulated keyframe timeline is involved.
+local function inspector_motion_callback(kind)
+    local selectedKind = kind
+    local code = [==[
+local function cartorig_apply()
+    local selected = tool
+    if not selected then error("HOST_TOOL: selected Fusion tool unavailable") end
+    local host = selected.Comp or
+        (rawget(_G, "fu") and fu.CurrentComp) or rawget(_G, "comp")
+    if not host then error("HOST_COMP: active Fusion comp unavailable") end
+    local identity = selected:GetData("CartoRigAtomic.IdentityV2")
+    if type(identity) ~= "table" or identity.role ~= "control" and
+        identity.role ~= "camera" then
+        error("OBJECT_ID: selected tool is not an authored CartoRig object")
+    end
+    local kind = "%%KIND%%"
+    local duration = tonumber(selected:GetInput("CR2MotionDuration"))
+    local now = tonumber(host.CurrentTime)
+    if not now or now%1~=0 or now<0 then
+        error("FRAME_INVALID: select a valid integer Fusion playhead frame")
+    end
+    if not duration or duration%1~=0 or duration<1 or duration>10000 then
+        error("DURATION_INVALID: choose an integer duration 1..10000")
+    end
+    local attrs = host:GetAttrs()
+    local last = attrs and tonumber(attrs.COMPN_RenderEnd)
+    if not last or now+duration>last then
+        error("FRAME_OUT_OF_RANGE: Motion extends past Fusion render range")
+    end
+    local actor
+    local propertyName
+    local preset
+    if kind=="Camera" then
+        actor=selected
+        propertyName="Size"
+        preset="MO-CAM-02"
+    else
+        preset=kind=="Marker" and "MO-MRK-01" or "MO-LBL-01"
+        propertyName="Blend"
+        for _,candidate in pairs(host:GetToolList(false) or {}) do
+            local ok, tag=pcall(function()
+                return candidate:GetData("CartoRigAtomic.IdentityV2")
+            end)
+            if ok and type(tag)=="table" and
+                tag.sceneId==identity.sceneId and
+                tag.objectId==identity.objectId and tag.role=="merge" then
+                actor=candidate
+                break
+            end
+        end
+    end
+    if not actor then error("HOST_GRAPH: authored Motion target is missing") end
+    local link=actor[propertyName]
+    if not link then error("HOST_CHANNEL: Fusion input is unavailable") end
+    local ok, existing=pcall(function()return link:GetConnectedOutput()end)
+    if not ok then error("HOST_CHANNEL: cannot inspect native animation") end
+    if existing then
+        error("MOTION_CONFLICT: channel already has animation. Review in Spline.")
+    end
+    local current=tonumber(actor:GetInput(propertyName))
+    if not current then error("HOST_VALUE: channel value unavailable") end
+    local target, startValue
+    if kind=="Camera" then
+        target=tonumber(selected:GetInput("CR2TargetZoom"))
+        if not target or target<=0 or target>100 then
+            error("TARGET_REQUIRED: Camera Zoom must be 0..100")
+        end
+        startValue=current
+    else
+        if current<=0 then error("TARGET_REQUIRED: opacity must be positive") end
+        startValue=0
+        target=current
+    end
+    host:StartUndo("CartoRig: "..preset)
+    local applied, reason=pcall(function()
+        if not actor:AddModifier(propertyName,"BezierSpline") then
+            error("HOST_ANIMATION: Fusion rejected BezierSpline")
+        end
+        actor:SetInput(propertyName,startValue,now)
+        actor:SetInput(propertyName,target,now+duration)
+        selected:SetData("CartoRigAtomic.MotionBindingV2",{
+            presetId=preset,channel=propertyName,
+            startFrame=now,endFrame=now+duration,
+            schemaVersion=2,state="ANIMATED_PRESET"
+        })
+    end)
+    host:EndUndo(applied)
+    if not applied then error(reason) end
+end
+local ok,err=pcall(cartorig_apply)
+if not ok then print("CartoRig Motion: "..tostring(err)) end
+]==]
+    return code:gsub("%%%%KIND%%%%", selectedKind)
+end
+
+local function attach_inspector_motion(tool, kind)
+    if kind~="Marker" and kind~="Label" and kind~="Camera" then
+        return
+    end
+    local preset=kind=="Marker" and "MO-MRK-01" or
+        kind=="Label" and "MO-LBL-01" or "MO-CAM-02"
+    local controls={
+        CR2MotionDuration={
+            LINKS_Name="Duration (Frames)", LINKID_DataType="Number",
+            INPID_InputControl="SliderControl",
+            ICS_ControlPage="Motion",
+            INP_Default=kind=="Camera" and 30 or 18,
+            INP_MinScale=1,INP_MaxScale=180,INP_Integer=true,
+            INP_External=false
+        },
+        CR2MotionApply={
+            LINKS_Name="Apply "..preset,
+            LINKID_DataType="Number",INPID_InputControl="ButtonControl",
+            ICS_ControlPage="Motion",INP_External=false,
+            BTNCS_Execute=inspector_motion_callback(kind)
+        }
+    }
+    if kind=="Camera" then
+        controls.CR2TargetZoom={
+            LINKS_Name="Target Zoom", LINKID_DataType="Number",
+            INPID_InputControl="SliderControl",ICS_ControlPage="Motion",
+            INP_Default=4,INP_MinScale=.25,INP_MaxScale=100,
+            INP_External=false
+        }
+    end
+    local ok,issue=pcall(function()
+        tool.UserControls=controls
+        tool:Refresh()
+    end)
+    if not ok then
+        fail("HOST_INSPECTOR", "Cannot publish native Motion controls: "..tostring(issue))
+    end
+end
+
 local function add_tool(comp, kind, name, x, y, sceneId, objectId, role)
     -- Explicit graph coordinates prevent Fusion's automatic insertion from
     -- silently connecting or moving foreign nodes.
@@ -246,6 +384,7 @@ function M.create(comp)
 
         local camera = add_tool(comp, "Transform", "CR2_Camera", 5, 0,
             sceneId, scene.cameraId, "camera")
+        attach_inspector_motion(camera, "Camera")
         camera:SetInput("Center", point(0.5, 0.5))
         camera:SetInput("Size", 1.0)
         checked_link(camera, "Input", background)
@@ -321,6 +460,8 @@ local function add_object(comp, kind, name, lon, lat, source)
         else
             fail("INVALID_OBJECT_TYPE", "Unsupported object type")
         end
+
+        attach_inspector_motion(source, kind)
 
         local merge = add_tool(comp, "Merge", "CR2_Merge_" .. n,
             2, n * 2, scene.sceneId, id, "merge")
