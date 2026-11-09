@@ -284,6 +284,11 @@ local function next_id(scene)
     return result
 end
 
+local function visible_source(comp, scene, object)
+    return object_tool(comp, scene, object.id, "render")
+        or object_tool(comp, scene, object.id, "control")
+end
+
 local function validate_graph(comp, scene)
     local base = object_tool(comp, scene, scene.sceneId, "base")
     local camera = object_tool(comp, scene, scene.cameraId, "camera")
@@ -309,7 +314,7 @@ local function validate_graph(comp, scene)
             fail("SCENE_BROKEN", "Object draw stack was externally modified")
         end
         if not equal_tool(graph_input(merge, "Foreground"),
-            object_tool(comp, scene, obj.id, "control")) then
+            visible_source(comp, scene, obj)) then
             fail("SCENE_BROKEN", "Object foreground link was externally modified")
         end
         previous = merge
@@ -598,6 +603,17 @@ function M.remove(comp, objectId)
     local control = object_tool(comp, scene, objectId, "control")
     local merge = object_tool(comp, scene, objectId, "merge")
     local mask = object_tool(comp, scene, objectId, "mask")
+    local extra = {}
+    for _, tool in pairs(comp:GetToolList(false) or {}) do
+        local ok, tag = pcall(function()
+            return tool:GetData(TOOL_KEY)
+        end)
+        if ok and type(tag) == "table" and tag.sceneId == scene.sceneId and
+            tag.objectId == objectId and tag.role ~= "control" and
+            tag.role ~= "merge" then
+            extra[#extra + 1] = tool
+        end
+    end
     local upstream = index == 1
         and object_tool(comp, scene, scene.sceneId, "base")
         or object_tool(comp, scene, scene.objects[index - 1].id, "merge")
@@ -614,8 +630,12 @@ function M.remove(comp, objectId)
         if not control:Delete() then
             fail("HOST_DELETE", "Fusion could not delete managed Control")
         end
-        if mask and not mask:Delete() then
-            fail("HOST_DELETE", "Fusion could not delete managed Mask")
+        -- Other render subtools include polygons, route masks and strokes.
+        -- Delete only nodes tagged with this exact scene and object ID.
+        for _, managed in ipairs(extra) do
+            if not managed:Delete() then
+                fail("HOST_DELETE", "Fusion could not delete owned subtool")
+            end
         end
         table.remove(scene.objects, index)
         scene.tailId = #scene.objects == 0 and scene.sceneId
