@@ -670,15 +670,18 @@ local function show_group_stage()
         or ("Selected ("..#names.."): "..table.concat(names,", "))
 end
 function window.On.StageGroup.Clicked(_)
-    local selected=selected_id()
+    local ok,selected=pcall(selected_id)
+    if not ok then feedback(label_error(selected)) return end
     for _,entry in ipairs(groupStages) do
         if entry.id==selected then
             feedback("GROUP_DUPLICATE: Object is already selected.")
             return
         end
     end
-    local comp=require_current()
-    local state=Runtime.inspect(comp)
+    local contextOk,comp=pcall(require_current)
+    if not contextOk then feedback(label_error(comp)) return end
+    local stateOk,state=pcall(Runtime.inspect,comp)
+    if not stateOk then feedback(label_error(state)) return end
     for _,object in ipairs(state.objects) do
         if object.id==selected then
             if object.locked or object.groupId then
