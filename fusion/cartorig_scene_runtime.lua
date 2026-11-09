@@ -1012,10 +1012,23 @@ function M.add_region(comp, feature, geometry)
         set_background_rgb(border,215/255,224/255,231/255)
         checked_link(border,"EffectMask",previousStroke)
         local inner=add_tool(comp,"Merge","CR2_RegionStroke_"..n,
-            0,n*2,scene.sceneId,id,"render")
+            0,n*2,scene.sceneId,id,"stroke_composite")
         checked_link(inner,"Background",fill)
         checked_link(inner,"Foreground",border)
-        add_composite(comp,scene,id,inner,n)
+        -- Own highlight surface, own Blend channel and Spline. No author
+        -- action may key the source Fill RGBA or Stroke while pulsing.
+        local light=add_tool(comp,"Background","CR2_HighlightColor_"..n,
+            -1,n*2,scene.sceneId,id,"highlight_color")
+        set_background_rgb(light,245/255,194/255,61/255)
+        checked_link(light,"EffectMask",previousMask)
+        local highlight=add_tool(comp,"Merge","CR2_Highlight_"..n,
+            1,n*2,scene.sceneId,id,"render")
+        checked_link(highlight,"Background",inner)
+        checked_link(highlight,"Foreground",light)
+        if highlight:SetInput("Blend",0)==false then
+            fail("HOST_HIGHLIGHT","Fusion cannot initialize independent strength")
+        end
+        add_composite(comp,scene,id,highlight,n)
         scene.objects[#scene.objects+1]={
             id=id,kind="Region",name=name,
             visible=true,locked=false,polygonRings=#geometry.rings,
