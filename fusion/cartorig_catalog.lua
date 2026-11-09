@@ -3,6 +3,7 @@
 -- Real Natural Earth records are distributed as a UTF-8 TSV asset.
 local M = {}
 local MAGIC = "CARTORIG_ATOMIC_PLACES_V1"
+local unpackFields = table.unpack or unpack -- Fusion may embed LuaJIT 5.1
 
 local accents = {
     ["á"]="a",["à"]="a",["â"]="a",["ã"]="a",["ä"]="a",
@@ -47,7 +48,7 @@ local function checked_line(line, index)
         error("CATALOG_FORMAT: invalid column count at row " .. index, 0)
     end
     local id, kind, name, parent, country, continent, lon, lat, aliasText =
-        table.unpack(cells)
+        unpackFields(cells)
     if id == "" or name == "" or (kind ~= "Country" and
         kind ~= "State" and kind ~= "City") then
         error("CATALOG_FORMAT: missing identity/type/name at row " .. index, 0)
