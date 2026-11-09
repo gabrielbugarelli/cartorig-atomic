@@ -49,6 +49,14 @@ local function new_comp()
             return false
         end
         function t:GetAttrs() return self.values end
+        t.Comp = comp
+        function t:Refresh() self.refreshed = true return true end
+        function t:GetInput(key)
+            if self.inputs[key] ~= nil then return self.inputs[key] end
+            if key=="Blend" then return 1.0 end
+            if key=="Size" then return 1.0 end
+            return nil
+        end
         function t:SetData(key, val) self.data[key] = val end
         function t:GetData(key) return self.data[key] end
         function t:SetAttrs(attrs)
@@ -121,6 +129,10 @@ local scene = comp:GetData("CartoRigAtomic.SceneV2")
 local base = find(comp, scene.sceneId, "base")
 local camera = find(comp, scene.cameraId, "camera")
 expect(base ~= nil and camera ~= nil, "Base Map and Camera persist identities")
+expect(camera.UserControls.CR2MotionApply.ICS_ControlPage=="Motion",
+       "Camera has native Inspector Motion page")
+expect(camera.UserControls.CR2MotionApply.BTNCS_Execute:find("MO-CAM-02",1,true),
+       "Camera Zoom To can apply from its own Inspector even with Scene closed")
 expect(camera.links.Input == base, "camera begins with base background only")
 for _, tool in ipairs(comp.list) do
     expect(next(tool.animations) == nil, "Scene creation never writes keyframes")
@@ -136,6 +148,10 @@ local merge1 = find(comp, marker1, "merge")
 local mask1 = find(comp, marker1, "mask")
 expect(control1 ~= nil and mask1 ~= nil and merge1 ~= nil,
        "Marker has real Fusion Background, EllipseMask and Merge")
+expect(control1.UserControls.CR2MotionApply.ICS_ControlPage=="Motion",
+       "Marker exposes native Inspector Motion without using Scene controls")
+expect(control1.UserControls.CR2MotionApply.BTNCS_Execute:find("MO-MRK-01",1,true),
+       "Marker Fade In callback carries a native Fusion Spline preset")
 expect(runtime.inspect(comp).objects[1].sourceRef.featureId=="ne10m:city:12345",
        "Natural Earth identity survives authored Marker creation")
 expect(runtime.inspect(comp).objects[1].sourceRef.provider=="Natural Earth",
@@ -156,6 +172,8 @@ expect(marker1 ~= marker2, "independent stable object IDs")
 local label = runtime.add_label(comp, "São Paulo", -46.6333, -23.5505)
 local labelControl = find(comp, label, "control")
 expect(labelControl.ID == "TextPlus", "Label uses native Fusion TextPlus")
+expect(labelControl.UserControls.CR2MotionApply.ICS_ControlPage=="Motion",
+       "Label has native Motion page on its selected TextPlus tool")
 expect(labelControl.inputs.StyledText == "São Paulo", "Unicode label preserved")
 expect(#runtime.inspect(comp).objects == 3, "Scene tree reconstructs from comp state")
 
@@ -269,6 +287,36 @@ expect(camera.links.Input == find(comp, label, "merge"),
        "deleting middle object does not disconnect MediaOut")
 expect(runtime.inspect(comp).sceneId == scene.sceneId,
        "scene survives CRUD without changing identity")
+
+
+-- Execute the literal Inspector button callbacks under the synthetic Fusion
+-- host. Buttons write native Spline keys without Scene UIManager or a process.
+comp.CurrentTime = 150
+function comp:GetAttrs() return { COMPN_RenderEnd = 400 } end
+local compile=loadstring or load
+local labelMerge=find(comp, label, "merge")
+labelControl.inputs.CR2MotionDuration=18
+local oldTool,oldComp=_G.tool,_G.comp
+_G.tool,_G.comp=labelControl,comp
+local compiled,problem=compile(labelControl.UserControls.CR2MotionApply.BTNCS_Execute)
+expect(type(compiled)=="function", "Inspector callback is executable standalone Lua")
+compiled()
+expect(labelMerge.animations.Blend[150]==0 and
+       labelMerge.animations.Blend[168]==1,
+       "Inspector Label button creates real Fusion Spline keys from playhead")
+expect(labelControl:GetData("CartoRigAtomic.MotionBindingV2").presetId=="MO-LBL-01",
+       "Motion provenance stored on Label tool, independent of Scene window")
+camera.inputs.CR2MotionDuration=30
+camera.inputs.CR2TargetZoom=6
+_G.tool=camera
+local camButton=assert(compile(camera.UserControls.CR2MotionApply.BTNCS_Execute))
+camButton()
+expect(camera.animations.Size[150]==2 and
+       camera.animations.Size[180]==6,
+       "Inspector Camera Zoom To creates native Size Spline without touching Center")
+expect(camera:GetData("CartoRigAtomic.MotionBindingV2").presetId=="MO-CAM-02",
+       "Camera Motion binding persists on camera Fusion tool")
+_G.tool,_G.comp=oldTool,oldComp
 
 local another = new_comp()
 another:AddTool("MediaOut")
