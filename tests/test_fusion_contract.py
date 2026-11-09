@@ -61,7 +61,7 @@ class FusionContractTests(unittest.TestCase):
     def test_comp_is_rechecked_on_refresh_not_cached_as_authority(self):
         source = PROBE.read_text(encoding="utf-8")
         self.assertRegex(source, r"local function refresh\(\)")
-        self.assertIn("local active = currentComposition()", source)
+        self.assertIn("local active, verified = currentComposition()", source)
         self.assertIn('WRONG_CONTEXT — Active composition changed', source)
         self.assertIn('NO_COMP — No Fusion composition selected', source)
         self.assertIn("Selected Fusion tool: invalidated", source)
