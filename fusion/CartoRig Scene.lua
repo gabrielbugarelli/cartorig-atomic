@@ -93,6 +93,12 @@ local window = dispatcher:AddWindow({
         ui:Button{ ID = "Group", Text = "Group Selected" },
         ui:Button{ ID = "Delete", Text = "Delete (Confirm)" }
     },
+    ui:Label{ Text = "ROUTE FOLLOWER — SELECT EXISTING MARKER" },
+    ui:Combo{ ID = "FollowerMarker" },
+    ui:HGroup{
+        ui:Button{ ID = "LinkFollower", Text = "Link to Selected Route" },
+        ui:Button{ ID = "UnlinkFollower", Text = "Unlink Follower" }
+    },
     ui:Label{ Text = "ADD GEOANCHORED OBJECT" },
     ui:Label{ Text = "Name" },
     ui:LineEdit{ ID = "Name", Text = "" },
@@ -129,6 +135,7 @@ end
 local items = window:GetItems()
 local binding = nil
 local choices = {}
+local followerChoices = {}
 local matching = {}
 local catalog = nil
 local geometryIndex = nil
@@ -189,7 +196,9 @@ local function sync()
     local current = current_comp()
     binding = nil
     choices = {}
+    followerChoices = {}
     items.Objects:Clear()
+    items.FollowerMarker:Clear()
     local active=current_comp and current_comp() or nil
     if active~=fitComp then
         fitItems={}
@@ -222,12 +231,21 @@ local function sync()
     local selectIndex = 0
     for i, object in ipairs(state.objects) do
         choices[#choices+1] = object.id
+        if object.kind=="Marker" then
+            followerChoices[#followerChoices+1]=object.id
+            items.FollowerMarker:AddItem(object.name)
+        end
         local prefix = object.groupId and
             ("[" .. tostring(groups[object.groupId] or "Group") .. "] ") or ""
         local suffix = object.locked and " [Locked]" or
             (object.visible == false and " [Hidden]" or "")
         items.Objects:AddItem(prefix .. object.kind .. " — " .. object.name .. suffix)
         if object.id == selectedObjectId then selectIndex = i - 1 end
+    end
+    if #followerChoices==0 then
+        items.FollowerMarker:AddItem("No authored Marker available")
+    else
+        items.FollowerMarker.CurrentIndex=0
     end
     if #choices == 0 then
         selectedObjectId = nil
@@ -566,6 +584,22 @@ end
 
 function window.On.FocusFound.Clicked(_)
     action_for_result("focus")
+end
+
+function window.On.LinkFollower.Clicked(_)
+    handle(function(comp)
+        local index=tonumber(items.FollowerMarker.CurrentIndex) or -1
+        local markerId=followerChoices[index+1]
+        if not markerId then
+            error("FOLLOWER_REQUIRED: Create or choose an existing Marker",0)
+        end
+        return Runtime.link_follower(comp,selected_id(),markerId)
+    end)
+end
+function window.On.UnlinkFollower.Clicked(_)
+    handle(function(comp)
+        return Runtime.unlink_follower(comp,selected_id())
+    end)
 end
 
 function window.On.Rename.Clicked(_)
