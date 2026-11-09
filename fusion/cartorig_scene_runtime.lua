@@ -492,6 +492,245 @@ function M.add_label(comp, name, lon, lat, source)
     return add_object(comp, "Label", name, lon, lat, source)
 end
 
+-- Geographic shape authoring. Native Fusion polylines remain vector paths
+-- at any output resolution. No image assets are baked for any zoom value.
+local function host_polyline(vertices, closed)
+    local constructor=rawget(_G,"Polyline")
+    if not constructor then
+        fail("HOST_POLYLINE", "Fusion Polyline constructor is unavailable")
+    end
+    local points={}
+    for _,v in ipairs(vertices) do
+        local x,y=validate_position(v.lon,v.lat)
+        -- PolylineMask control points are relative to Center = (0.5,0.5).
+        points[#points+1]={Linear=true,X=x/360,Y=y/180}
+    end
+    if #points < (closed and 3 or 2) then
+        fail("GEOMETRY_FORMAT","Insufficient geographic vertices for Fusion mask")
+    end
+    local ok,result=pcall(constructor,{Closed=closed,Points=points})
+    if not ok or result==nil then
+        fail("HOST_POLYLINE","Fusion refused geographic polygon construction")
+    end
+    return result
+end
+
+local function make_mask(comp, scene, objectId, index, ring, closed, width, paint)
+    local mask=add_tool(comp,"PolylineMask","CR2_Path_" .. index,
+        -7,index*2,scene.sceneId,objectId,"shape"..index)
+    if mask:SetInput("Polyline",host_polyline(ring,closed))==false then
+        fail("HOST_POLYLINE","Unable to assign Fusion vector geometry")
+    end
+    if not closed then
+        if mask:SetInput("Solid",0)==false or
+           mask:SetInput("BorderWidth",width or .0016)==false then
+            fail("HOST_MASK","Fusion could not configure path stroke")
+        end
+    end
+    if paint=="Subtract" then
+        local ctor=rawget(_G,"FuID")
+        if not ctor then fail("HOST_MASK","Fusion FuID constructor is unavailable") end
+        local ok,mode=pcall(ctor,{"Subtract"})
+        if not ok or mode==nil or mask:SetInput("PaintMode",mode)==false then
+            fail("HOST_MASK","Fusion could not subtract the polygon hole")
+        end
+    end
+    return mask
+end
+
+local function set_background_rgb(source,r,g,b)
+    if source:SetInput("TopLeftRed",r)==false or
+       source:SetInput("TopLeftGreen",g)==false or
+       source:SetInput("TopLeftBlue",b)==false or
+       source:SetInput("TopLeftAlpha",1)==false then
+        fail("HOST_COLOR","Cannot set native Fusion Background color")
+    end
+end
+
+local function add_composite(comp,scene,id,source,n)
+    local _,camera,previous=validate_graph(comp,scene)
+    local merge=add_tool(comp,"Merge","CR2_ObjectMerge_"..n,
+        3,n*2,scene.sceneId,id,"merge")
+    checked_link(merge,"Background",previous)
+    checked_link(merge,"Foreground",source)
+    checked_link(camera,"Input",merge)
+    scene.tailId=id
+    return merge
+end
+
+function M.add_region(comp, feature, geometry)
+    if type(feature)~="table" or type(feature.id)~="string" or
+       (feature.kind~="Country" and feature.kind~="State") then
+        fail("INVALID_REGION","Choose a country or state with real polygon geometry")
+    end
+    if type(geometry)~="table" or geometry.id~=feature.id or
+       type(geometry.rings)~="table" or #geometry.rings<1 then
+        fail("NO_GEOMETRY","Region polygon is absent or does not match source")
+    end
+    if #geometry.rings>4096 then
+        fail("GEOMETRY_SIZE","Region exceeds managed Fusion polygon limit")
+    end
+    local name=safe_name(feature.name)
+    local scene=require_scene(comp)
+    validate_graph(comp,scene)
+    return undo(comp,"CartoRig: Add Region",function()
+        local id=next_id(scene)
+        local n=#scene.objects+1
+        local fill=add_tool(comp,"Background","CR2_Region_"..n,
+            -3,n*2,scene.sceneId,id,"control")
+        set_background_rgb(fill,130/255,150/255,164/255)
+        local previousMask
+        local previousStroke
+        for i,ring in ipairs(geometry.rings) do
+            if type(ring.vertices)~="table" then
+                fail("GEOMETRY_FORMAT","Polygon has no vertices")
+            end
+            local mask=make_mask(comp,scene,id,i,ring.vertices,true,nil,
+                ring.kind=="H" and "Subtract" or "Add")
+            if previousMask then checked_link(mask,"EffectMask",previousMask) end
+            previousMask=mask
+            local stroke=make_mask(comp,scene,id,#geometry.rings+i,
+                ring.vertices,true,1.5/1920,"Add")
+            if stroke:SetInput("Solid",0)==false or
+               stroke:SetInput("BorderWidth",1.5/1920)==false then
+                fail("HOST_MASK","Region stroke width is unavailable")
+            end
+            if previousStroke then
+                checked_link(stroke,"EffectMask",previousStroke)
+            end
+            previousStroke=stroke
+        end
+        checked_link(fill,"EffectMask",previousMask)
+        local border=add_tool(comp,"Background","CR2_RegionBorder_"..n,
+            -2,n*2,scene.sceneId,id,"border")
+        set_background_rgb(border,215/255,224/255,231/255)
+        checked_link(border,"EffectMask",previousStroke)
+        local inner=add_tool(comp,"Merge","CR2_RegionStroke_"..n,
+            0,n*2,scene.sceneId,id,"render")
+        checked_link(inner,"Background",fill)
+        checked_link(inner,"Foreground",border)
+        add_composite(comp,scene,id,inner,n)
+        scene.objects[#scene.objects+1]={
+            id=id,kind="Region",name=name,
+            visible=true,locked=false,polygonRings=#geometry.rings,
+            sourceRef={
+                provider="Natural Earth",dataset=feature.kind=="Country"
+                    and "ne_10m_admin_0_countries"
+                    or "ne_10m_admin_1_states_provinces",
+                datasetVersion="1:10m",featureId=feature.id,
+                featureType=feature.kind,country=feature.country,
+                parent=feature.parent,
+                worldview="Natural Earth"
+            }
+        }
+        comp:SetData(SCENE_KEY,scene)
+        return id
+    end)
+end
+
+local function contains_ring(vertices,lon,lat)
+    local inside=false
+    local previous=vertices[#vertices]
+    for _,v in ipairs(vertices) do
+        local x1,y1=previous.lon,previous.lat
+        local x2,y2=v.lon,v.lat
+        if (y1>lat)~=(y2>lat) then
+            local at=x1+(lat-y1)*(x2-x1)/(y2-y1)
+            if lon<at then inside=not inside end
+        end
+        previous=v
+    end
+    return inside
+end
+
+function M.contains_point(geometry,lon,lat)
+    lon,lat=validate_position(lon,lat)
+    if not geometry or type(geometry.rings)~="table" then
+        fail("NO_GEOMETRY","Cannot test containment without polygon rings")
+    end
+    local result=false
+    for _,ring in ipairs(geometry.rings) do
+        if ring.kind=="O" then
+            if contains_ring(ring.vertices,lon,lat) then result=true end
+        elseif ring.kind=="H" and contains_ring(ring.vertices,lon,lat) then
+            result=false
+        end
+    end
+    return result
+end
+
+local function route_vertices(origin,destination,style,curvature)
+    local x1,y1=validate_position(origin.lon,origin.lat)
+    local x2,y2=validate_position(destination.lon,destination.lat)
+    if style~="Straight" and style~="Curved" then
+        fail("INVALID_ROUTE","Route must be Straight or Curved")
+    end
+    curvature=tonumber(curvature) or .2
+    if curvature~=curvature or curvature < -2 or curvature > 2 then
+        fail("INVALID_ROUTE","Route curvature must be -2..2")
+    end
+    local delta=x2-x1
+    if delta>180 then x2=x2-360 end
+    if delta< -180 then x2=x2+360 end
+    local dx,dy=x2-x1,y2-y1
+    local curve=(style=="Curved") and curvature or 0
+    local controlX=(x1+x2)/2-dy*curve
+    local controlY=(y1+y2)/2+dx*curve
+    local vertices={}
+    local steps=style=="Straight" and 1 or 32
+    for i=0,steps do
+        local t=i/steps
+        local x=(1-t)*(1-t)*x1+2*(1-t)*t*controlX+t*t*x2
+        local y=(1-t)*(1-t)*y1+2*(1-t)*t*controlY+t*t*y2
+        while x>180 do x=x-360 end
+        while x< -180 do x=x+360 end
+        vertices[#vertices+1]={lon=x,lat=y}
+    end
+    return vertices
+end
+
+function M.add_route(comp,origin,arrival,details)
+    details=details or {}
+    if type(origin)~="table" or type(arrival)~="table" then
+        fail("ENDPOINT_REQUIRED","Select an origin and an explicit arrival point")
+    end
+    local ox,oy=validate_position(origin.lon,origin.lat)
+    local tx,ty=validate_position(arrival.lon,arrival.lat)
+    if details.destinationState then
+        if not M.contains_point(details.destinationGeometry,tx,ty) then
+            fail("ENDPOINT_OUTSIDE_STATE",
+                "The selected arrival point is not inside the selected State")
+        end
+    end
+    local style=details.pathType or "Straight"
+    local vertices=route_vertices(
+        {lon=ox,lat=oy},{lon=tx,lat=ty},style,details.curvature)
+    local name=safe_name(details.name or
+        ((origin.name or "Origin").." → "..(arrival.name or "Destination")))
+    local scene=require_scene(comp)
+    validate_graph(comp,scene)
+    return undo(comp,"CartoRig: Add Route",function()
+        local id=next_id(scene)
+        local n=#scene.objects+1
+        local source=add_tool(comp,"Background","CR2_Route_"..n,
+            -3,n*2,scene.sceneId,id,"control")
+        set_background_rgb(source,214/255,223/255,230/255)
+        local mask=make_mask(comp,scene,id,n,vertices,false,3/1920,"Add")
+        checked_link(source,"EffectMask",mask)
+        add_composite(comp,scene,id,source,n)
+        scene.objects[#scene.objects+1]={
+            id=id,kind="Route",name=name,visible=true,locked=false,
+            route={ from={lon=ox,lat=oy,sourceId=origin.id},
+                    to={lon=tx,lat=ty,sourceId=arrival.id},
+                    pathType=style,curvature=details.curvature or .2,
+                    destinationStateId=details.destinationState and
+                        details.destinationState.id or nil },
+        }
+        comp:SetData(SCENE_KEY,scene)
+        return id
+    end)
+end
+
 local function ensure_unlocked(object)
     if object.locked then
         fail("LOCKED", "Unlock " .. object.name .. " before changing it")
