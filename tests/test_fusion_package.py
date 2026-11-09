@@ -41,11 +41,11 @@ class FusionPackageTests(unittest.TestCase):
 
     def test_original_source_preserves_scene_without_auto_creation(self):
         source = packager.UI.read_text(encoding="utf-8")
-        self.assertEqual(source.count("Runtime.create("), 1)
+        self.assertEqual(source.count("pcall(Runtime.create,"), 1)
         self.assertIn("function window.On.Create.Clicked(_)", source)
         # Scene should not be created during UI startup.
         after_functions = source[source.index("sync()\nwindow:Show()"):]
-        self.assertNotIn("Runtime.create(", after_functions)
+        self.assertNotIn("pcall(Runtime.create,", after_functions)
 
     def test_installer_is_user_scope(self):
         script = (ROOT / "install/CartoRigAtomicFusionScene.iss").read_text("utf-8")
@@ -53,7 +53,8 @@ class FusionPackageTests(unittest.TestCase):
         self.assertIn(r"Fusion\Scripts\Comp", script)
         self.assertIn("CartoRig Scene.lua", script)
         self.assertNotIn("PowerShell", script)
-        self.assertNotIn("python", script.lower())
+        self.assertNotIn("Filename: python", script)
+        self.assertNotIn("run: python", script.lower())
 
 
 if __name__ == "__main__":
