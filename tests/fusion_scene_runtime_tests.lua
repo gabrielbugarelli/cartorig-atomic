@@ -85,6 +85,9 @@ local function new_comp()
         end
         t.Input = port("Input")
         t.Blend = port("Blend")
+        t.Background = port("Background")
+        t.Foreground = port("Foreground")
+        t.EffectMask = port("EffectMask")
         self.list[#self.list + 1] = t
         return t
     end
