@@ -1,0 +1,40 @@
+name: Fusion CR-PS-2.0 contract and read-only host probe
+
+on:
+  push:
+    branches:
+      - rewrite/fusion-v2-contract
+    paths:
+      - 'docs/specs/CR-PS-2.0_Fusion_2026-11-08.md'
+      - 'experiments/fusion-host/**'
+      - 'tools/check_fusion_contract.py'
+      - 'tests/test_fusion_contract.py'
+      - '.github/workflows/fusion-v2-contract.yml'
+  pull_request:
+    paths:
+      - 'docs/specs/CR-PS-2.0_Fusion_2026-11-08.md'
+      - 'experiments/fusion-host/**'
+      - 'tools/check_fusion_contract.py'
+      - 'tests/test_fusion_contract.py'
+      - '.github/workflows/fusion-v2-contract.yml'
+  workflow_dispatch:
+
+jobs:
+  documentary-and-safety:
+    name: Contract integrity and read-only code checks
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify verbatim master specification and full ID inventory
+        run: python tools/check_fusion_contract.py
+      - name: Run contract, safety and supersession tests
+        run: python -m unittest discover -s tests -p "test_fusion_contract.py" -v
+      - name: Report evidence boundary
+        run: echo "STATIC CHECKS ONLY - Resolve 20 Fusion host UI, Spline and MediaOut remain NOT TESTED."

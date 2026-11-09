@@ -1,0 +1,5 @@
+# Preserve byte-for-byte SHA-256 of the owner-provided specification on Windows.
+*.md text eol=lf
+*.py text eol=lf
+*.lua text eol=lf
+*.yml text eol=lf

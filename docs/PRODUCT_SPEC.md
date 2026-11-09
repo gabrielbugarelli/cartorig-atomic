@@ -1,3 +1,5 @@
+> **HISTORICAL — SUPERSEDED by [CR-PS-2.0 Fusion master specification](specs/CR-PS-2.0_Fusion_2026-11-08.md).** This is an archival pre-Fusion proposal, not an authorized current implementation contract. Earlier Edit-first approaches and UI assumptions must not be used for the greenfield Fusion rewrite.
+
 # Product specification — CartoRig Atomic
 
 **Status:** Draft for product-owner review. **This is not an authorization to implement every item below.**

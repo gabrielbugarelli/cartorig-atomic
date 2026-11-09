@@ -1,45 +1,31 @@
-# CartoRig Atomic
+# CartoRig Atomic — Fusion rewrite
 
-> **Status: specification and research only — no implementation has begun.**
+> **Current design authority:** [CR-PS-2.0, Fusion master specification](docs/specs/CR-PS-2.0_Fusion_2026-11-08.md), received from the product owner on 2026-11-09. **Product Design Complete / Owner Sign-off Required** for the `BASELINE-PROPOSED` release contract.
 
-CartoRig Atomic is a proposed **free, open-source, Edit-first cartographic animation system for DaVinci Resolve Studio**, rebuilt from scratch around a consistent product interaction model.
+CartoRig Atomic is a **greenfield, offline, open-source-intended cartographic animation authoring system for the Fusion page of DaVinci Resolve Studio 20 on Windows**.
 
-This repository is intended to start with **documentation only**. It does **not** reuse the source code, scripts, installer, OFX binaries, scene graphs, tests, raster assets, or proprietary sample assets from prior CartoRig implementations or third-party plugins.
+The previous **Edit-first / single OpenFX Inspector** direction is **superseded by the newer CR-PS-2.0 Fusion mandate**. The older documents under `docs/PRODUCT_SPEC.md`, `docs/DESIGN_SYSTEM.md` and `docs/ARCHITECTURE.md` are **historical drafts, not current implementation requirements**; the master specification takes precedence on disagreement. Previous experimental PRs remain unmerged and must **not** be copied or silently adapted into the rewrite.
 
-## Intended user experience
+## Product organization
 
-The product direction is **Find → Add → Style → Animate**:
+- **Scene** — Fusion UI Manager window: search, add, select, reorder, duplicate, group, hide/lock, delete and recover authored map objects.
+- **Control** — the selected cartographic **Fusion tool** exposes contextual, independently animatable properties in its native Inspector.
+- **Motion** — contextual presets write genuine Fusion keys and curves that remain editable in the host's Spline/Keyframes editors.
+- **Render** — composition output must work with Scene closed, offline, under random seeks and after Save/Reopen/MediaOut/Deliver.
 
-- Find a place by its natural name, with clear distinctions between countries, states/provinces and cities.
-- Add a geographic object to a map scene.
-- Edit map-base and object properties using one consistent system for fill, stroke and opacity.
-- Animate camera movements, territory highlights, and routes within DaVinci Resolve's existing editing workflow.
+The planned 1.0 scope in CR-PS-2.0 includes Base Map, Region, Route, Marker, Camera, Label, Group and 16 Motion presets. This complete `BASELINE-PROPOSED` scope **has not been unilaterally reclassified as approved**.
 
-**Reference use cases**
+## Engineering workflow
 
-1. Highlight **Rio de Janeiro (state)** within Brazil.
-2. Focus or animate the map camera to **São Paulo (city)**.
-3. Draw and animate an arrow from **Brasília (city)** to an explicitly selected point in **Amapá (state)**.
+1. Read the [complete normative specification](docs/specs/CR-PS-2.0_Fusion_2026-11-08.md), including chapter 0 decision statuses and chapter 18 release gates.
+2. Read the [Fusion rewrite execution plan](docs/engineering/CR-PS-2.0_ENGINEERING_PLAN.md).
+3. Validate real Resolve Studio 20 Fusion APIs **before** implementing large geographic/render subsystems: UI Manager/comp identity, object → selected tool/Inspector, separate BezierSpline curves, MediaOut and persistence.
+4. Implement host-independent geography, topology, renderer and persistence **from scratch**, after the integration contract is demonstrated.
+5. Add only approved user-facing release behavior and test every feature against its `SC/CT/MO/HOST/QA` identifiers.
+6. Package all runtime dependencies and offline geography for graphical Windows installation; do not require terminal, Python or SDK tools on editor machines.
 
-The project targets an English-language interface and offline geographic data workflows. These are product requirements; their implementation in a particular Resolve 20 UI surface has **not yet been verified or approved**.
+## Provenance and status
 
-## Project documents
+This branch contains the owner's specification and new research scaffolding, **not a certified Fusion product**. Host evidence from the earlier Edit prototype does not certify Fusion-specific operations. No code from older CartoRig branches or proprietary GEOlayers/VES components is reused.
 
-- [Product specification](docs/PRODUCT_SPEC.md) — intended outcomes, scope and acceptance cases.
-- [Design system](docs/DESIGN_SYSTEM.md) — Atomic Design structure and UI consistency contracts.
-- [Architecture](docs/ARCHITECTURE.md) — candidate technical boundaries and host validation gates.
-- [Decisions](docs/DECISIONS.md) — explicit approvals and outstanding decisions.
-- [Research and attribution](docs/RESEARCH.md) — lessons learned from GEOlayers 3, the VES sample, Natural Earth, and Resolve.
-
-## Working agreement
-
-- **No feature, menu, UI workflow, data-source change, automatic behavior or architectural commitment is approved by appearing in a draft.**
-- Product interaction is approved before implementation; technical feasibility is verified on the real Resolve host.
-- Do not import or adapt code or assets from previous CartoRig repositories.
-- Research and empirical findings from earlier work are permitted as evidence; source code is not.
-- Tests must distinguish simulations/CI from observation on DaVinci Resolve Studio 20.
-- The open-source license is **pending owner approval**; this repository is intended to become open source, but no license grant should be inferred from an empty license file or this README.
-
-## Current status
-
-**Proposed documentation baseline.** Nothing in this repository is a completed or certified DaVinci Resolve plugin.
+The eventual code license is an owner-approved decision after dependency review; **Apache-2.0 is proposed in the specification, not granted by this repository alone**.
