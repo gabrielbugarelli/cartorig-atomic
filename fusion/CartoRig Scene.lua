@@ -3,6 +3,7 @@
 -- The build system embeds the original cartorig_scene_runtime.lua at this marker.
 local Runtime = @@EMBED_RUNTIME@@
 local Geo = @@EMBED_CATALOG@@
+local Shapes = @@EMBED_GEOMETRY@@
 
 local fusionApp = rawget(_G, "fu") or rawget(_G, "fusion")
 local bmdApi = rawget(_G, "bmd")
@@ -42,9 +43,21 @@ local window = dispatcher:AddWindow({
     ui:Combo{ ID = "SearchResults" },
     ui:Label{ ID = "LocationDetail", Text = "Enter a location name to search the installed index." },
     ui:HGroup{
+        ui:Button{ ID = "AddFoundRegion", Text = "Add Region" },
         ui:Button{ ID = "AddFoundMarker", Text = "Add Marker" },
         ui:Button{ ID = "AddFoundLabel", Text = "Add Label" },
-        ui:Button{ ID = "FocusFound", Text = "Focus Camera" }
+        ui:Button{ ID = "FocusFound", Text = "Focus" }
+    },
+    ui:Label{ Text = "CREATE ROUTE FROM SELECTED LOCATIONS" },
+    ui:HGroup{
+        ui:Button{ ID = "UseRouteFrom", Text = "Set Start" },
+        ui:Button{ ID = "UseRouteState", Text = "Set State" },
+        ui:Button{ ID = "UseRouteArrival", Text = "Set Arrival" }
+    },
+    ui:Label{ ID = "RouteSelection", Text = "Start: —    State: —    Arrival: —" },
+    ui:HGroup{
+        ui:Combo{ ID = "RouteStyle" },
+        ui:Button{ ID = "CreateRoute", Text = "Add Route" }
     },
     ui:Label{ Text = "SCENE OBJECTS" },
     ui:Combo{ ID = "Objects" },
@@ -101,6 +114,8 @@ local binding = nil
 local choices = {}
 local matching = {}
 local catalog = nil
+local geometryIndex = nil
+local routeStart,routeState,routeArrival = nil,nil,nil
 local dataIssue = nil
 local selectedObjectId = nil
 local pendingDelete = nil
@@ -113,6 +128,11 @@ if scriptFolder then
         package.config:sub(1, 1) .. "places.tsv"
     local ok, loaded = pcall(Geo.from_file, dataPath)
     if ok then catalog = loaded else dataIssue = tostring(loaded) end
+    local geometryPath = scriptFolder .. "CartoRigAtomic_Data" ..
+        package.config:sub(1, 1) .. "geometry.tsv"
+    local geometryOk, index = pcall(Shapes.from_file, geometryPath)
+    if geometryOk then geometryIndex = index
+    else dataIssue = tostring(index) end
 else
     dataIssue = "CATALOG_PATH: Resolve did not expose an installed script directory."
 end
@@ -120,6 +140,10 @@ for _, option in ipairs({ "All", "Country", "State", "City", "Continent" }) do
     items.LocationFilter:AddItem(option)
 end
 items.LocationFilter.CurrentIndex = 0
+for _, style in ipairs({ "Straight", "Curved" }) do
+    items.RouteStyle:AddItem(style)
+end
+items.RouteStyle.CurrentIndex = 0
 
 local function current_comp()
     -- Never fall back to the first composition when a different composition
@@ -338,9 +362,84 @@ function window.On.SearchResults.CurrentIndexChanged(_)
     local row = matching[index + 1]
     if not row then return end
     local geometry = row.point and "Point (WGS84)" or
-        "Administrative region (polygon data, renderer pending)"
+        (geometryIndex and geometryIndex:get(row.id) and "Vector polygon (WGS84)" or
+            "No usable polygon geometry in offline data")
     items.LocationDetail.Text = row.name .. " — " .. row.kind ..
         " — " .. row.country .. " — " .. geometry
+end
+
+function window.On.AddFoundRegion.Clicked(_)
+    handle(function(comp)
+        if not geometryIndex then
+            error(dataIssue or "NO_GEOMETRY: Offline polygon pack unavailable",0)
+        end
+        local row=current_match()
+        if row.kind~="Country" and row.kind~="State" then
+            error("NO_POLYGON: Choose a Country or State, not a city point.",0)
+        end
+        local geometry=geometryIndex:get(row.id)
+        if not geometry then
+            error("NO_GEOMETRY: Geographic polygon unavailable for "..row.name,0)
+        end
+        return Runtime.add_region(comp,row,geometry)
+    end)
+end
+
+local function route_caption()
+    items.RouteSelection.Text = "Start: "..(routeStart and routeStart.name or "—")..
+        "    State: "..(routeState and routeState.name or "—")..
+        "    Arrival: "..(routeArrival and routeArrival.name or "—")
+end
+function window.On.UseRouteFrom.Clicked(_)
+    local ok,row=pcall(current_match)
+    if not ok then feedback(label_error(row)) return end
+    if row.kind~="City" or not row.point then
+        feedback("ROUTE_START: Choose a City with a WGS84 point.") return
+    end
+    routeStart=row
+    route_caption()
+end
+function window.On.UseRouteState.Clicked(_)
+    local ok,row=pcall(current_match)
+    if not ok then feedback(label_error(row)) return end
+    if row.kind~="State" then
+        feedback("ROUTE_STATE: Choose a State with real polygon geometry.") return
+    end
+    if not geometryIndex or not geometryIndex:get(row.id) then
+        feedback("NO_GEOMETRY: The selected State has no usable polygon.") return
+    end
+    routeState=row
+    routeArrival=nil
+    route_caption()
+end
+function window.On.UseRouteArrival.Clicked(_)
+    local ok,row=pcall(current_match)
+    if not ok then feedback(label_error(row)) return end
+    if row.kind~="City" or not row.point then
+        feedback("ROUTE_ARRIVAL: Choose an explicit City, not a State.") return
+    end
+    routeArrival=row
+    route_caption()
+end
+function window.On.CreateRoute.Clicked(_)
+    handle(function(comp)
+        if not routeStart or not routeState or not routeArrival then
+            error("ENDPOINT_REQUIRED: Choose Start, State and explicit Arrival.",0)
+        end
+        local polygon=geometryIndex and geometryIndex:get(routeState.id)
+        if not polygon then error("NO_GEOMETRY: Route State geometry missing",0) end
+        local style=tonumber(items.RouteStyle.CurrentIndex)==1 and
+            "Curved" or "Straight"
+        return Runtime.add_route(comp,
+            {id=routeStart.id,name=routeStart.name,
+             lon=routeStart.point.lon,lat=routeStart.point.lat},
+            {id=routeArrival.id,name=routeArrival.name,
+             lon=routeArrival.point.lon,lat=routeArrival.point.lat},
+            {destinationState=routeState,destinationGeometry=polygon,
+             pathType=style,
+             name=routeStart.name.." → "..routeArrival.name.." ("..
+                 routeState.name..")"})
+    end)
 end
 
 function window.On.AddFoundMarker.Clicked(_)
