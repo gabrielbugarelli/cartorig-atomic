@@ -108,6 +108,7 @@ local function cartorig_apply()
         error("FRAME_OUT_OF_RANGE: Motion extends past Fusion render range")
     end
     local actor
+    local routeActors
     local propertyName
     local preset
     if kind=="Camera" then
@@ -117,18 +118,39 @@ local function cartorig_apply()
     elseif kind=="Route" then
         preset="MO-RTE-01"
         propertyName="WriteLength"
-        for _,candidate in pairs(host:GetToolList(false) or {}) do
-            local ok, tag=pcall(function()
-                return candidate:GetData("CartoRigAtomic.IdentityV2")
-            end)
-            if ok and type(tag)=="table" and
-                tag.sceneId==identity.sceneId and
-                tag.objectId==identity.objectId and
-                tostring(tag.role):match("^shape") then
-                actor=candidate
-                break
-            end
+        local segments=selected:GetData("CartoRigAtomic.RouteSegmentsV2")
+        if type(segments)~="table" or #segments<1 then
+            error("ROUTE_GEOMETRY: Route has no resolved vector segments")
         end
+        routeActors={}
+        for _,part in ipairs(segments) do
+            local found
+            for _,candidate in pairs(host:GetToolList(false) or {}) do
+                local ok,tag=pcall(function()
+                    return candidate:GetData("CartoRigAtomic.IdentityV2")
+                end)
+                if ok and type(tag)=="table" and
+                    tag.sceneId==identity.sceneId and
+                    tag.objectId==identity.objectId and
+                    tag.role==part.role then
+                    found=candidate
+                    break
+                end
+            end
+            if not found or not found.WriteLength then
+                error("ROUTE_GEOMETRY: Route path mask is missing or disconnected")
+            end
+            local ok,existing=pcall(function()
+                return found.WriteLength:GetConnectedOutput()
+            end)
+            if not ok or existing then
+                error("MOTION_CONFLICT: Route Write Length is already animated")
+            end
+            routeActors[#routeActors+1]={
+                tool=found, length=tonumber(part.length) or 0
+            }
+        end
+        actor=routeActors[1].tool
     else
         preset=kind=="Marker" and "MO-MRK-01" or
                kind=="Region" and "MO-REG-01" or "MO-LBL-01"
@@ -172,11 +194,35 @@ local function cartorig_apply()
     end
     host:StartUndo("CartoRig: "..preset)
     local applied, reason=pcall(function()
-        if not actor:AddModifier(propertyName,"BezierSpline") then
-            error("HOST_ANIMATION: Fusion rejected BezierSpline")
+        if kind=="Route" then
+            local total=0
+            for _,part in ipairs(routeActors) do total=total+part.length end
+            if total<=0 then error("GEOMETRY_FORMAT: Empty route path") end
+            local consumed=0
+            for _,part in ipairs(routeActors) do
+                local first=now+math.floor(duration*(consumed/total)+.5)
+                consumed=consumed+part.length
+                local lastFrame=now+math.floor(duration*(consumed/total)+.5)
+                if lastFrame<=first then
+                    error("FRAME_COLLISION: Too little duration for multipart Route")
+                end
+                if not part.tool:AddModifier("WriteLength","BezierSpline") then
+                    error("HOST_ANIMATION: Fusion rejected Route progress Spline")
+                end
+                part.tool:SetInput("WriteLength",0,now)
+                if first>now then part.tool:SetInput("WriteLength",0,first) end
+                part.tool:SetInput("WriteLength",1,lastFrame)
+                if lastFrame<now+duration then
+                    part.tool:SetInput("WriteLength",1,now+duration)
+                end
+            end
+        else
+            if not actor:AddModifier(propertyName,"BezierSpline") then
+                error("HOST_ANIMATION: Fusion rejected BezierSpline")
+            end
+            actor:SetInput(propertyName,startValue,now)
+            actor:SetInput(propertyName,target,now+duration)
         end
-        actor:SetInput(propertyName,startValue,now)
-        actor:SetInput(propertyName,target,now+duration)
         selected:SetData("CartoRigAtomic.MotionBindingV2",{
             presetId=preset,channel=propertyName,
             startFrame=now,endFrame=now+duration,
