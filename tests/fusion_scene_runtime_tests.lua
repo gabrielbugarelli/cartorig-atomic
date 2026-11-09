@@ -97,6 +97,7 @@ local function new_comp()
         t.Blend = port("Blend")
         t.Size = port("Size")
         t.Center = port("Center")
+        t.WriteLength = port("WriteLength")
         t.Background = port("Background")
         t.Foreground = port("Foreground")
         t.EffectMask = port("EffectMask")
@@ -458,5 +459,44 @@ expect(math.abs(maskB.inputs.Polyline.Points[1].X-
                 maskB.inputs.Polyline.Points[2].X)<.01,
     "west of dateline path remains spatially local")
 
+
+
+-- The native Route Inspector's Draw Path must evaluate the full path,
+-- including seam splits, rather than reveal two halves simultaneously.
+comp.CurrentTime=200
+routeControl.inputs.CR2MotionDuration=30
+local beforeTool,beforeComp=_G.tool,_G.comp
+_G.tool,_G.comp=routeControl,comp
+local routeButton=assert((loadstring or load)(
+    routeControl.UserControls.CR2MotionApply.BTNCS_Execute))
+routeButton()
+local firstPart=assert(routeControl:GetData("CartoRigAtomic.RouteSegmentsV2"))[1]
+local firstRouteMask=find(comp,routeId,firstPart.role)
+expect(firstRouteMask.animations.WriteLength[200]==0 and
+       firstRouteMask.animations.WriteLength[230]==1,
+       "native Route Draw Path keys animate the entire single-segment route")
+expect(routeControl:GetData("CartoRigAtomic.MotionBindingV2").presetId=="MO-RTE-01",
+       "Route Control preserves native Motion binding without Scene UIManager")
+local datelineControl=find(comp,antimeridianId,"control")
+local dataSegments=datelineControl:GetData("CartoRigAtomic.RouteSegmentsV2")
+expect(#dataSegments==2 and dataSegments[1].length>0 and
+       dataSegments[2].length>0,"multipart Route stores projected segment lengths")
+comp.CurrentTime=250
+datelineControl.inputs.CR2MotionDuration=30
+_G.tool=datelineControl
+local seamButton=assert((loadstring or load)(
+    datelineControl.UserControls.CR2MotionApply.BTNCS_Execute))
+seamButton()
+local left=find(comp,antimeridianId,dataSegments[1].role)
+local right=find(comp,antimeridianId,dataSegments[2].role)
+local ratio=dataSegments[1].length/(dataSegments[1].length+dataSegments[2].length)
+local seamFrame=250+math.floor(30*ratio+.5)
+expect(left.animations.WriteLength[250]==0 and
+       left.animations.WriteLength[seamFrame]==1,
+       "east-side segment finishes at its proportional keyframe")
+expect(right.animations.WriteLength[seamFrame]==0 and
+       right.animations.WriteLength[280]==1,
+       "west-side segment starts only when east-side segment finishes")
+_G.tool,_G.comp=beforeTool,beforeComp
 
 print("PASS: " .. checks .. " original Fusion graph / Control / Motion assertions")
