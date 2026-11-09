@@ -61,7 +61,7 @@ def check_contract(path: Path = SPEC, require_original_hash: bool = True) -> dic
         raise ValueError("R1.0 Motion matrix must contain exactly 16 defined presets")
 
     # Do not silently upgrade proposed visual decisions to user-approved scope.
-    if "não são apresentados como aprovados pelo proprietário" not in source:
+    if "não são apresentados como aprovados pelo proprietário" not in source.replace("**", ""):
         raise ValueError("Product approval guard was lost")
     if "OWNER SIGN-OFF REQUIRED" not in source:
         raise ValueError("Owner homologation must remain explicitly required")
