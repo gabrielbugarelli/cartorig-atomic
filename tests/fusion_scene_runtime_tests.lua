@@ -784,4 +784,63 @@ expect(mask1.animations.Width[268]==14/1920,
        "Pop conflict prevents destructive overwrite of existing Size curves")
 _G.tool,_G.comp=savePopTool,savePopComp
 
+
+-- Fly To is separate from static Focus. The selected real city is stored
+-- on the camera; keyframes are generated only when Motion is clicked.
+local flyComp=new_comp()
+flyComp:AddTool("MediaOut")
+runtime.create(flyComp)
+local flyScene=flyComp:GetData("CartoRigAtomic.SceneV2")
+local flyCamera=find(flyComp,flyScene.cameraId,"camera")
+runtime.focus(flyComp,179,0,2)
+expect(flyCamera.inputs.CR2CameraLongitude==179 and
+       flyCamera.inputs.CR2CameraLatitude==0,
+       "static Camera Focus retains correct WGS84 longitude and latitude")
+expect_failure(function()
+    runtime.set_fly_target(flyComp,
+        {id="ne10m:state:xx",kind="State",name="Amapá"},4)
+end,"TARGET_REQUIRED")
+expect_failure(function()
+    runtime.set_fly_target(flyComp,
+        {id="ne10m:city:xx",kind="City",point={lon=-179,lat=1}},0)
+end,"INVALID_ZOOM")
+local flyFeature={
+    id="ne10m:city:west",kind="City",name="Dateline West",
+    country="Test",point={lon=-179,lat=1}
+}
+runtime.set_fly_target(flyComp,flyFeature,4)
+expect(next(flyCamera.animations)==nil,
+       "choosing Fly Target never adds implicit keyframes")
+expect(flyCamera:GetData("CartoRigAtomic.CameraFlyTargetV2").featureId==
+       flyFeature.id,"explicit City sourceRef persists with camera")
+flyComp.CurrentTime=100
+function flyComp:GetAttrs()return {COMPN_RenderEnd=400}end
+flyCamera.inputs.CR2FlyDuration=45
+local savedFlyTool,savedFlyComp=_G.tool,_G.comp
+_G.tool,_G.comp=flyCamera,flyComp
+local flyApply=assert((loadstring or load)(
+    flyCamera.UserControls.CR2MotionFly.BTNCS_Execute))
+flyApply()
+expect(flyCamera.animations.CR2CameraLongitude[100]==179 and
+       flyCamera.animations.CR2CameraLongitude[145]==181,
+       "Fly To traverses 179 to -179 by the shortest 2 degree arc")
+expect(flyCamera.animations.CR2CameraLatitude[100]==0 and
+       flyCamera.animations.CR2CameraLatitude[145]==1,
+       "Fly To owns a separate latitude Spline")
+expect(flyCamera.animations.Size[100]==2 and
+       flyCamera.animations.Size[145]==4,
+       "Fly To owns a separate native Zoom Spline")
+expect(flyCamera:GetData("CartoRigAtomic.MotionFlyV2").presetId=="MO-CAM-01",
+       "native Fly To binding survives closing UIManager")
+expect(flyCamera.expressions.Center:find("CR2CameraLongitude",1,true),
+       "Fusion Center expression remains active under native Camera animation")
+expect_failure(function()runtime.focus(flyComp,0,0)end,
+       "MOTION_CONFLICT")
+expect_failure(function()runtime.set_zoom(flyComp,3)end,
+       "MOTION_CONFLICT")
+flyApply()
+expect(flyCamera.animations.Size[145]==4,
+       "re-applying Fly To does not overwrite existing Zoom/position keys")
+_G.tool,_G.comp=savedFlyTool,savedFlyComp
+
 print("PASS: " .. checks .. " original Fusion graph / Control / Motion assertions")
