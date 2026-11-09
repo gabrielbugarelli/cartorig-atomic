@@ -39,6 +39,16 @@ local function new_comp()
     function comp:AddTool(kind, _, x, y)
         local t = { ID = kind, inputs = {}, links = {}, values = {}, data = {},
                     graphX = x, graphY = y, animations = {} }
+        function t:Delete()
+            for i, candidate in ipairs(comp.list) do
+                if candidate == self then
+                    table.remove(comp.list, i)
+                    return true
+                end
+            end
+            return false
+        end
+        function t:GetAttrs() return self.values end
         function t:SetData(key, val) self.data[key] = val end
         function t:GetData(key) return self.data[key] end
         function t:SetAttrs(attrs)
@@ -98,7 +108,7 @@ expect_failure(function() runtime.add_marker(comp, "Uninitialized", 0, 0) end,
                "NO_SCENE")
 
 local result = runtime.create(comp)
-expect(result.state == "SCENE_READY", "Scene creation persists")
+expect(result.state == "SCENE_EMPTY", "Scene creation persists with no author objects")
 expect(#result.objects == 0, "Scene initialization creates no author objects")
 expect(#comp.list == 3, "one Background and shared Transform added")
 expect(#comp.undo == 1 and comp.undo[1].accepted, "scene grouped into Undo")
@@ -174,6 +184,76 @@ local reopened = runtime.inspect(comp)
 expect(reopened.sceneId == scene.sceneId and #reopened.objects == 3,
        "scene recovers with UI closed and reopened")
 expect(merge1.animations.Blend[124] == 1, "keyframes persist independent of Scene UI")
+
+
+-- Complete scene CRUD must change only the authored object and preserve
+-- unrelated nodes, stable object IDs and independent Fusion Spline curves.
+local originalMarker = marker1
+expect(runtime.rename(comp, marker1, "São Paulo custom label") == marker1,
+       "rename does not change object ID")
+expect(runtime.inspect(comp).objects[1].name == "São Paulo custom label",
+       "rename is in persisted Fusion metadata")
+expect(runtime.select(comp, marker1) == control1,
+       "tool rename and display rename do not break object references")
+
+runtime.set_visibility(comp, marker1, false)
+expect(merge1.values.TOOLB_PassThrough == true,
+       "Hide bypasses only its owned Merge")
+expect(merge1.animations.Blend[124] == 1,
+       "Hide never destroys native animation")
+expect(runtime.inspect(comp).objects[1].visible == false,
+       "Visibility stored separately from opacity and keys")
+runtime.set_visibility(comp, marker1, true)
+expect(merge1.values.TOOLB_PassThrough == false,
+       "Show restores the authored object")
+expect(runtime.inspect(comp).objects[1].visible == true,
+       "Show state persists")
+
+runtime.set_lock(comp, marker1, true)
+expect(runtime.inspect(comp).objects[1].locked == true,
+       "Lock state is persisted")
+expect_failure(function() runtime.rename(comp, marker1, "Not allowed") end, "LOCKED")
+expect_failure(function() runtime.remove(comp, marker1) end, "LOCKED")
+expect_failure(function() runtime.move(comp, marker1, 1) end, "LOCKED")
+runtime.set_lock(comp, marker1, false)
+expect(runtime.inspect(comp).objects[1].locked == false, "Unlock is explicit")
+
+local groupId = runtime.create_group(comp, "Capital labels", { marker1, label })
+expect(type(groupId) == "string", "organizational Group has stable identity")
+expect(#runtime.inspect(comp).groups == 1, "Group appears in scene state")
+expect(runtime.inspect(comp).objects[1].groupId == groupId,
+       "group membership persists independently from node properties")
+runtime.ungroup(comp, groupId)
+expect(#runtime.inspect(comp).groups == 0, "Ungroup deletes only organization")
+expect(runtime.inspect(comp).objects[1].groupId == nil,
+       "Ungroup preserves geographic object")
+
+runtime.move(comp, marker1, 1)
+expect(comp:GetData("CartoRigAtomic.SceneV2").objects[2].id == marker1,
+       "Move down changes global scene order")
+expect(merge1.links.Background == merge2,
+       "Move down rewires image draw order, preserving object IDs")
+expect(merge2.links.Background == base,
+       "Moved earlier object connects to original Base Map")
+expect(camera.links.Input == find(comp, label, "merge"),
+       "Camera remains connected to top of scene stack")
+expect_failure(function() runtime.move(comp, label, 1) end, "ORDER_BOUNDARY")
+
+local priorCount = #comp:GetToolList()
+runtime.remove(comp, marker2)
+expect(#runtime.inspect(comp).objects == 2,
+       "deletion removes only selected cartographic object")
+expect(#comp:GetToolList() == priorCount - 3,
+       "deletion removes marker control, mask and Merge")
+expect(find(comp, marker2, "control") == nil,
+       "deleted object no longer has managed Fusion Control")
+expect(#comp.undo > 7, "each operation is a native host Undo transaction")
+expect(comp:GetData("CartoRigAtomic.SceneV2").objects[1].id == marker1,
+       "remaining objects keep authored order")
+expect(camera.links.Input == find(comp, label, "merge"),
+       "deleting middle object does not disconnect MediaOut")
+expect(runtime.inspect(comp).sceneId == scene.sceneId,
+       "scene survives CRUD without changing identity")
 
 local another = new_comp()
 another:AddTool("MediaOut")
