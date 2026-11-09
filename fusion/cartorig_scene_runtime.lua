@@ -211,7 +211,8 @@ function M.inspect(comp)
         objects[#objects + 1] = {
             id = obj.id, kind = obj.kind, name = obj.name,
             lon = obj.lon, lat = obj.lat, visible = obj.visible ~= false,
-            locked = obj.locked == true, groupId = obj.groupId
+            locked = obj.locked == true, groupId = obj.groupId,
+            sourceRef = copy_table(obj.sourceRef)
         }
     end
     return { state = #objects == 0 and "SCENE_EMPTY" or "SCENE_READY",
@@ -259,9 +260,37 @@ function M.create(comp)
     end)
 end
 
-local function add_object(comp, kind, name, lon, lat)
+local function source_ref(source)
+    if source == nil then
+        return { provider = "User", featureType = "Custom Point" }
+    end
+    if type(source) ~= "table" or type(source.id) ~= "string" or
+        not source.id:match("^ne10m:") or source.kind ~= "City" or
+        type(source.name) ~= "string" then
+        fail("INVALID_SOURCE", "Selected location must be an installed Natural Earth city")
+    end
+    return {
+        provider = "Natural Earth",
+        dataset = "ne_10m_populated_places",
+        datasetVersion = "1:10m",
+        featureId = source.id,
+        featureType = "City",
+        name = source.name,
+        country = tostring(source.country or ""),
+        parent = tostring(source.parent or ""),
+        worldview = "Natural Earth"
+    }
+end
+
+local function add_object(comp, kind, name, lon, lat, source)
     name = safe_name(name)
     lon, lat = validate_position(lon, lat)
+    local provenance = source_ref(source)
+    if source and source.point and
+       (math.abs(lon-source.point.lon)>1e-6 or
+        math.abs(lat-source.point.lat)>1e-6) then
+        fail("SOURCE_MISMATCH", "Selected feature coordinates do not match offline data")
+    end
     local scene = require_scene(comp)
     local _, camera, tail = validate_graph(comp, scene)
     return undo(comp, "CartoRig: Add " .. kind, function()
@@ -302,19 +331,19 @@ local function add_object(comp, kind, name, lon, lat)
         scene.tailId = id
         scene.objects[#scene.objects + 1] = {
             id = id, kind = kind, name = name, lon = lon, lat = lat,
-            visible = true, locked = false
+            visible = true, locked = false, sourceRef = provenance
         }
         comp:SetData(SCENE_KEY, scene)
         return id
     end)
 end
 
-function M.add_marker(comp, name, lon, lat)
-    return add_object(comp, "Marker", name, lon, lat)
+function M.add_marker(comp, name, lon, lat, source)
+    return add_object(comp, "Marker", name, lon, lat, source)
 end
 
-function M.add_label(comp, name, lon, lat)
-    return add_object(comp, "Label", name, lon, lat)
+function M.add_label(comp, name, lon, lat, source)
+    return add_object(comp, "Label", name, lon, lat, source)
 end
 
 local function ensure_unlocked(object)
