@@ -65,6 +65,8 @@ class FusionContractTests(unittest.TestCase):
         self.assertIn('WRONG_CONTEXT — Active composition changed', source)
         self.assertIn('NO_COMP — No Fusion composition selected', source)
         self.assertIn("Selected Fusion tool: invalidated", source)
+        self.assertIn("CONTEXT_UNVERIFIED — CurrentComp API unavailable", source)
+        self.assertIn("if not lookupOk then", source)
 
     def test_no_offline_search_or_motion_features_are_falsely_advertised(self):
         source = PROBE.read_text(encoding="utf-8")
