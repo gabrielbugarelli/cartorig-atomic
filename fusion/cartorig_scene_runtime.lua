@@ -114,8 +114,24 @@ local function cartorig_apply()
         actor=selected
         propertyName="Size"
         preset="MO-CAM-02"
+    elseif kind=="Route" then
+        preset="MO-RTE-01"
+        propertyName="WriteLength"
+        for _,candidate in pairs(host:GetToolList(false) or {}) do
+            local ok, tag=pcall(function()
+                return candidate:GetData("CartoRigAtomic.IdentityV2")
+            end)
+            if ok and type(tag)=="table" and
+                tag.sceneId==identity.sceneId and
+                tag.objectId==identity.objectId and
+                tostring(tag.role):match("^shape") then
+                actor=candidate
+                break
+            end
+        end
     else
-        preset=kind=="Marker" and "MO-MRK-01" or "MO-LBL-01"
+        preset=kind=="Marker" and "MO-MRK-01" or
+               kind=="Region" and "MO-REG-01" or "MO-LBL-01"
         propertyName="Blend"
         for _,candidate in pairs(host:GetToolList(false) or {}) do
             local ok, tag=pcall(function()
@@ -146,6 +162,9 @@ local function cartorig_apply()
             error("TARGET_REQUIRED: Camera Zoom must be 0..100")
         end
         startValue=current
+    elseif kind=="Route" then
+        startValue=0
+        target=1
     else
         if current<=0 then error("TARGET_REQUIRED: opacity must be positive") end
         startValue=0
@@ -174,17 +193,21 @@ if not ok then print("CartoRig Motion: "..tostring(err)) end
 end
 
 local function attach_inspector_motion(tool, kind)
-    if kind~="Marker" and kind~="Label" and kind~="Camera" then
+    if kind~="Marker" and kind~="Label" and kind~="Camera" and
+        kind~="Region" and kind~="Route" then
         return
     end
     local preset=kind=="Marker" and "MO-MRK-01" or
-        kind=="Label" and "MO-LBL-01" or "MO-CAM-02"
+        kind=="Label" and "MO-LBL-01" or
+        kind=="Region" and "MO-REG-01" or
+        kind=="Route" and "MO-RTE-01" or "MO-CAM-02"
     local controls={
         CR2MotionDuration={
             LINKS_Name="Duration (Frames)", LINKID_DataType="Number",
             INPID_InputControl="SliderControl",
             ICS_ControlPage="Motion",
-            INP_Default=kind=="Camera" and 30 or 18,
+            INP_Default=kind=="Camera" and 30 or
+                kind=="Region" and 24 or kind=="Route" and 30 or 18,
             INP_MinScale=1,INP_MaxScale=180,INP_Integer=true,
             INP_External=false
         },
@@ -610,6 +633,7 @@ function M.add_region(comp, feature, geometry)
         local fill=add_tool(comp,"Background","CR2_Region_"..n,
             -3,n*2,scene.sceneId,id,"control")
         set_background_rgb(fill,130/255,150/255,164/255)
+        attach_inspector_motion(fill,"Region")
         local previousMask
         local previousStroke
         for i,ring in ipairs(geometry.rings) do
@@ -771,6 +795,7 @@ function M.add_route(comp,origin,arrival,details)
         local source=add_tool(comp,"Background","CR2_Route_"..n,
             -3,n*2,scene.sceneId,id,"control")
         set_background_rgb(source,214/255,223/255,230/255)
+        attach_inspector_motion(source,"Route")
         local previousMask
         for i,segment in ipairs(segments) do
             local mask=make_mask(comp,scene,id,n*100+i,segment,false,3/1920,"Add")
