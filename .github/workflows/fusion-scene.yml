@@ -67,6 +67,8 @@ jobs:
           luac5.4 -p "dist/CartoRig Scene.lua"
       - name: Run packaging regression tests
         run: python -m unittest discover -s tests -p test_fusion_package.py -v
+      - name: Verify full R1.0 release is blocked until every host and QA case passes
+        run: python -m unittest discover -s tests -p test_release_gate.py -v
       - name: Upload standalone developer script
         uses: actions/upload-artifact@v4
         with:
