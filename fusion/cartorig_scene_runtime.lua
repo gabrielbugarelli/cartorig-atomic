@@ -1555,7 +1555,7 @@ function M.add_region(comp, feature, geometry)
         -- action may key the source Fill RGBA or Stroke while pulsing.
         local light=add_tool(comp,"Background","CR2_HighlightColor_"..n,
             -1,n*2,scene.sceneId,id,"highlight_color")
-        set_background_rgb(light,245/255,194/255,61/255)
+        set_background_rgb(light,230/255,198/255,107/255)
         checked_link(light,"EffectMask",previousMask)
         local highlight=add_tool(comp,"Merge","CR2_Highlight_"..n,
             1,n*2,scene.sceneId,id,"render")
