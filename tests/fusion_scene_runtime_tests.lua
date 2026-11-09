@@ -1014,6 +1014,8 @@ followApply()
 expect(followRoute.animations.CR2FollowerProgress[100]==0 and
        followRoute.animations.CR2FollowerProgress[160]==1,
        "Route Follow Path creates native Spline progress 0 to 1 in 60 frames")
+expect(followRoute.splineKeyframes.CR2FollowerProgress[100].Flags.Linear==true,
+       "Follow Path uses native Linear interpolation for arc-length progress")
 expect(followRoute:GetData("CartoRigAtomic.MotionFollowerV2").presetId==
        "MO-RTE-03","route owns separate persistent native Motion identity")
 expect(mask1.animations.Width[268]==14/1920 and
