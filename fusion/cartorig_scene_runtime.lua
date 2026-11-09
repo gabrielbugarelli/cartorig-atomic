@@ -1584,6 +1584,7 @@ function M.add_route(comp,origin,arrival,details)
             lengths[#lengths+1]={role=role,length=length}
         end
         source:SetData("CartoRigAtomic.RouteSegmentsV2",lengths)
+        source:SetData("CartoRigAtomic.RoutePolylineV2",copy_table(segments))
         checked_link(source,"EffectMask",previousMask)
         add_composite(comp,scene,id,source,n)
         scene.objects[#scene.objects+1]={
