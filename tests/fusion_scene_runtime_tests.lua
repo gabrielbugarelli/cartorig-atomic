@@ -517,4 +517,27 @@ expect(right.animations.WriteLength[seamFrame]==0 and
        "west-side segment starts only when east-side segment finishes")
 _G.tool,_G.comp=beforeTool,beforeComp
 
+
+-- Scene lock is enforced by self-contained Inspector Motion callbacks too:
+-- a locked object cannot be animated by bypassing the Scene UI.
+local lockedId=runtime.add_marker(comp,"Locked Motion QA",0,0)
+local lockedControl=find(comp,lockedId,"control")
+local lockedMerge=find(comp,lockedId,"merge")
+lockedControl.inputs.CR2MotionDuration=18
+runtime.set_lock(comp,lockedId,true)
+local savedTool,savedComp=_G.tool,_G.comp
+_G.tool,_G.comp=lockedControl,comp
+comp.CurrentTime=290
+local lockedApply=assert((loadstring or load)(
+    lockedControl.UserControls.CR2MotionApply.BTNCS_Execute))
+lockedApply()
+expect(next(lockedMerge.animations)==nil,
+       "Inspector Motion must refuse locked authored object without writing keys")
+runtime.set_lock(comp,lockedId,false)
+lockedApply()
+expect(lockedMerge.animations.Blend[290]==0 and
+       lockedMerge.animations.Blend[308]==1,
+       "Unlock restores independent native Inspector Motion on owned marker")
+_G.tool,_G.comp=savedTool,savedComp
+
 print("PASS: " .. checks .. " original Fusion graph / Control / Motion assertions")
