@@ -540,4 +540,46 @@ expect(lockedMerge.animations.Blend[290]==0 and
        "Unlock restores independent native Inspector Motion on owned marker")
 _G.tool,_G.comp=savedTool,savedComp
 
+
+-- Additional Inspector-native presets: Region Fade Out and Route Erase.
+local fadeRegionId=runtime.add_region(comp,state,statePolygon)
+local fadeRegionControl=find(comp,fadeRegionId,"control")
+local fadeRegionMerge=find(comp,fadeRegionId,"merge")
+comp.CurrentTime=310
+fadeRegionControl.inputs.CR2MotionDuration=24
+local savedVariantTool,savedVariantComp=_G.tool,_G.comp
+_G.tool,_G.comp=fadeRegionControl,comp
+local fadeOutButton=assert((loadstring or load)(
+    fadeRegionControl.UserControls.CR2MotionFadeOut.BTNCS_Execute))
+fadeOutButton()
+expect(fadeRegionMerge.animations.Blend[310]==1 and
+       fadeRegionMerge.animations.Blend[334]==0,
+       "Region Fade Out generates native keys from current opacity to zero")
+expect(fadeRegionControl:GetData("CartoRigAtomic.MotionBindingV2").presetId==
+       "MO-REG-02","Region Fade Out persists correct independent Motion ID")
+local regionFadeInButton=assert((loadstring or load)(
+    fadeRegionControl.UserControls.CR2MotionApply.BTNCS_Execute))
+regionFadeInButton()
+expect(fadeRegionMerge.animations.Blend[334]==0,
+       "Second preset on animated Region opacity must not overwrite Spline")
+
+local eraseRouteId=runtime.add_route(comp,origin,arrival,
+    {destinationState=state,destinationGeometry=statePolygon,
+     pathType="Straight",name="Erase Route"})
+local eraseControl=find(comp,eraseRouteId,"control")
+local eraseParts=eraseControl:GetData("CartoRigAtomic.RouteSegmentsV2")
+local eraseMask=find(comp,eraseRouteId,eraseParts[1].role)
+comp.CurrentTime=345
+eraseControl.inputs.CR2MotionDuration=30
+_G.tool=eraseControl
+local eraseButton=assert((loadstring or load)(
+    eraseControl.UserControls.CR2MotionErase.BTNCS_Execute))
+eraseButton()
+expect(eraseMask.animations.WriteLength[345]==1 and
+       eraseMask.animations.WriteLength[375]==0,
+       "Route Erase is the reverse temporal motion, not reversed geometry")
+expect(eraseControl:GetData("CartoRigAtomic.MotionBindingV2").presetId==
+       "MO-RTE-02","Route Erase carries its own persistent native Motion ID")
+_G.tool,_G.comp=savedVariantTool,savedVariantComp
+
 print("PASS: " .. checks .. " original Fusion graph / Control / Motion assertions")
