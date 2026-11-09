@@ -107,6 +107,17 @@ def build(output: Path, cache: Path):
                 "sources": {},
                 "license": "Natural Earth public domain"}
     output.parent.mkdir(parents=True, exist_ok=True)
+    places = output.parent / "places.tsv"
+    if not places.exists():
+        raise ValueError("Build the matching Natural Earth place index first")
+    valid_ids = set()
+    with places.open("r", encoding="utf-8") as source:
+        if source.readline().strip() != "CARTORIG_ATOMIC_PLACES_V1":
+            raise ValueError("Unsupported matching place-index version")
+        for row in source:
+            identity, _, _ = row.partition("\t")
+            if identity.startswith(("ne10m:country:", "ne10m:state:")):
+                valid_ids.add(identity)
     with output.open("w", encoding="utf-8", newline="\n") as out:
         out.write(HEADER + "\n")
         for kind in ("Country", "State"):
@@ -129,6 +140,8 @@ def build(output: Path, cache: Path):
                 except ValueError:
                     pass
                 identity = f"ne10m:{kind.lower()}:{natural_id}"
+                if identity not in valid_ids:
+                    continue  # The search pack omits unnamed Natural Earth records.
                 rings = feature_rings(sr.shape, TOLERANCE[kind])
                 if not rings:
                     raise ValueError(f"Empty geometry: {identity}")
