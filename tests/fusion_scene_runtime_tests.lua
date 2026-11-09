@@ -470,6 +470,11 @@ expect(regionRender.links.Background==find(comp,regionId,"stroke_composite") and
     "Highlight overlays the region with separate Fusion nodes")
 expect(regionRender.inputs.Blend==0,
     "Region highlight starts at zero strength; no keys are generated")
+local highlightBackground=find(comp,regionId,"highlight_color")
+expect(highlightBackground.inputs.TopLeftRed==230/255 and
+       highlightBackground.inputs.TopLeftGreen==198/255 and
+       highlightBackground.inputs.TopLeftBlue==107/255,
+       "Region Highlight Pulse uses specification tint #E6C66B")
 expect(regionControl.inputs.TopLeftRed==130/255,
     "Region uses approved neutral grey-blue default rather than editorial highlight")
 expect(runtime.inspect(comp).objects[#runtime.inspect(comp).objects].sourceRef.featureId==
