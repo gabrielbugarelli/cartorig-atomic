@@ -131,7 +131,7 @@ local function get_scene(comp)
         type(data.sceneId) ~= "string" or type(data.objects) ~= "table" then
         fail("SCENE_VERSION", "Unsupported CartoRig scene state; no changes made")
     end
-    return data
+    return copy_table(data)
 end
 
 local function require_scene(comp)
@@ -210,10 +210,13 @@ function M.inspect(comp)
     for _, obj in ipairs(scene.objects) do
         objects[#objects + 1] = {
             id = obj.id, kind = obj.kind, name = obj.name,
-            lon = obj.lon, lat = obj.lat
+            lon = obj.lon, lat = obj.lat, visible = obj.visible ~= false,
+            locked = obj.locked == true, groupId = obj.groupId
         }
     end
-    return { state = "SCENE_READY", sceneId = scene.sceneId, objects = objects }
+    return { state = #objects == 0 and "SCENE_EMPTY" or "SCENE_READY",
+        sceneId = scene.sceneId, objects = objects,
+        groups = copy_table(scene.groups or {}) }
 end
 
 function M.create(comp)
@@ -227,7 +230,7 @@ function M.create(comp)
         local scene = {
             schema = VERSION, sceneId = sceneId,
             cameraId = sceneId .. "-camera",
-            tailId = sceneId, nextId = 1, objects = {},
+            tailId = sceneId, nextId = 1, objects = {}, groups = {},
             projection = "Equirectangular",
             displayMode = "Full Map"
         }
@@ -298,7 +301,8 @@ local function add_object(comp, kind, name, lon, lat)
 
         scene.tailId = id
         scene.objects[#scene.objects + 1] = {
-            id = id, kind = kind, name = name, lon = lon, lat = lat
+            id = id, kind = kind, name = name, lon = lon, lat = lat,
+            visible = true, locked = false
         }
         comp:SetData(SCENE_KEY, scene)
         return id
@@ -311,6 +315,191 @@ end
 
 function M.add_label(comp, name, lon, lat)
     return add_object(comp, "Label", name, lon, lat)
+end
+
+local function ensure_unlocked(object)
+    if object.locked then
+        fail("LOCKED", "Unlock " .. object.name .. " before changing it")
+    end
+end
+
+local function rewire_stack(comp, scene)
+    local base, camera = validate_graph(comp, scene)
+    local previous = base
+    for _, object in ipairs(scene.objects) do
+        local layer = object_tool(comp, scene, object.id, "merge")
+        checked_link(layer, "Background", previous)
+        previous = layer
+    end
+    checked_link(camera, "Input", previous)
+    scene.tailId = #scene.objects == 0 and scene.sceneId
+        or scene.objects[#scene.objects].id
+end
+
+function M.rename(comp, objectId, newName)
+    newName = safe_name(newName)
+    local scene = require_scene(comp)
+    validate_graph(comp, scene)
+    local _, obj = object_index(scene, objectId)
+    ensure_unlocked(obj)
+    return undo(comp, "CartoRig: Rename Object", function()
+        obj.name = newName
+        comp:SetData(SCENE_KEY, scene)
+        return objectId
+    end)
+end
+
+function M.set_visibility(comp, objectId, visible)
+    if type(visible) ~= "boolean" then
+        fail("INVALID_VISIBILITY", "Visibility must be true or false")
+    end
+    local scene = require_scene(comp)
+    validate_graph(comp, scene)
+    local _, obj = object_index(scene, objectId)
+    ensure_unlocked(obj)
+    local merge = object_tool(comp, scene, objectId, "merge")
+    return undo(comp, visible and "CartoRig: Show Object"
+        or "CartoRig: Hide Object", function()
+        -- Fusion pass-through suppresses this composite layer without
+        -- destroying or modifying the Blend animation curve.
+        if merge:SetAttrs({ TOOLB_PassThrough = not visible }) == false then
+            fail("HOST_VISIBILITY", "Fusion refused pass-through update")
+        end
+        obj.visible = visible
+        comp:SetData(SCENE_KEY, scene)
+        return visible
+    end)
+end
+
+function M.set_lock(comp, objectId, locked)
+    if type(locked) ~= "boolean" then
+        fail("INVALID_LOCK", "Lock must be true or false")
+    end
+    local scene = require_scene(comp)
+    validate_graph(comp, scene)
+    local _, obj = object_index(scene, objectId)
+    return undo(comp, locked and "CartoRig: Lock Object"
+        or "CartoRig: Unlock Object", function()
+        obj.locked = locked
+        comp:SetData(SCENE_KEY, scene)
+        return locked
+    end)
+end
+
+function M.move(comp, objectId, direction)
+    direction = tonumber(direction)
+    if direction ~= -1 and direction ~= 1 then
+        fail("INVALID_DIRECTION", "Choose Move Up or Move Down")
+    end
+    local scene = require_scene(comp)
+    validate_graph(comp, scene)
+    local index, obj = object_index(scene, objectId)
+    ensure_unlocked(obj)
+    local target = index + direction
+    if target < 1 or target > #scene.objects then
+        fail("ORDER_BOUNDARY", "Object is already at that end of the draw stack")
+    end
+    ensure_unlocked(scene.objects[target])
+    return undo(comp, "CartoRig: Reorder Object", function()
+        scene.objects[index], scene.objects[target] =
+            scene.objects[target], scene.objects[index]
+        -- Rewire against the original host graph, which still matches
+        -- the previous persistent order until the explicit action succeeds.
+        local base = object_tool(comp, scene, scene.sceneId, "base")
+        local camera = object_tool(comp, scene, scene.cameraId, "camera")
+        local previous = base
+        for _, object in ipairs(scene.objects) do
+            local merge = object_tool(comp, scene, object.id, "merge")
+            checked_link(merge, "Background", previous)
+            previous = merge
+        end
+        checked_link(camera, "Input", previous)
+        scene.tailId = scene.objects[#scene.objects].id
+        comp:SetData(SCENE_KEY, scene)
+        return target
+    end)
+end
+
+function M.remove(comp, objectId)
+    local scene = require_scene(comp)
+    validate_graph(comp, scene)
+    local index, obj = object_index(scene, objectId)
+    ensure_unlocked(obj)
+    local control = object_tool(comp, scene, objectId, "control")
+    local merge = object_tool(comp, scene, objectId, "merge")
+    local mask = object_tool(comp, scene, objectId, "mask")
+    local upstream = index == 1
+        and object_tool(comp, scene, scene.sceneId, "base")
+        or object_tool(comp, scene, scene.objects[index - 1].id, "merge")
+    local downstream = index == #scene.objects
+        and object_tool(comp, scene, scene.cameraId, "camera")
+        or object_tool(comp, scene, scene.objects[index + 1].id, "merge")
+    return undo(comp, "CartoRig: Delete Object", function()
+        checked_link(downstream, index == #scene.objects
+            and "Input" or "Background", upstream)
+        -- Only explicitly tagged CartoRig-owned tools are ever deleted.
+        if not merge:Delete() then
+            fail("HOST_DELETE", "Fusion could not delete managed Merge")
+        end
+        if not control:Delete() then
+            fail("HOST_DELETE", "Fusion could not delete managed Control")
+        end
+        if mask and not mask:Delete() then
+            fail("HOST_DELETE", "Fusion could not delete managed Mask")
+        end
+        table.remove(scene.objects, index)
+        scene.tailId = #scene.objects == 0 and scene.sceneId
+            or scene.objects[#scene.objects].id
+        comp:SetData(SCENE_KEY, scene)
+        return objectId
+    end)
+end
+
+function M.create_group(comp, name, selectedIds)
+    name = safe_name(name)
+    if type(selectedIds) ~= "table" or #selectedIds == 0 then
+        fail("INVALID_GROUP", "Select at least one object to group")
+    end
+    local scene = require_scene(comp)
+    validate_graph(comp, scene)
+    local unique = {}
+    local selections = {}
+    for _, id in ipairs(selectedIds) do
+        if unique[id] then fail("INVALID_GROUP", "Duplicate object in selection") end
+        unique[id] = true
+        local _, obj = object_index(scene, id)
+        ensure_unlocked(obj)
+        selections[#selections+1] = obj
+    end
+    return undo(comp, "CartoRig: Group Objects", function()
+        local groupId = next_id(scene)
+        scene.groups = scene.groups or {}
+        scene.groups[#scene.groups+1] = { id = groupId, name = name }
+        for _, obj in ipairs(selections) do obj.groupId = groupId end
+        comp:SetData(SCENE_KEY, scene)
+        return groupId
+    end)
+end
+
+function M.ungroup(comp, groupId)
+    local scene = require_scene(comp)
+    validate_graph(comp, scene)
+    local index
+    for i, g in ipairs(scene.groups or {}) do
+        if g.id == groupId then index = i break end
+    end
+    if not index then fail("GROUP_MISSING", "Group no longer exists") end
+    for _, obj in ipairs(scene.objects) do
+        if obj.groupId == groupId then ensure_unlocked(obj) end
+    end
+    return undo(comp, "CartoRig: Ungroup Objects", function()
+        for _, obj in ipairs(scene.objects) do
+            if obj.groupId == groupId then obj.groupId = nil end
+        end
+        table.remove(scene.groups, index)
+        comp:SetData(SCENE_KEY, scene)
+        return groupId
+    end)
 end
 
 function M.select(comp, objectId)
