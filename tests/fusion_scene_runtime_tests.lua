@@ -28,6 +28,11 @@ local function new_comp()
     function comp:GetData(key) return self.state[key] end
     function comp:SetData(key, value) self.state[key] = value end
     function comp:GetToolList() return self.list end
+    function comp:GetPrefs(key)
+        if key=="Comp.FrameFormat.Width" then return 1920 end
+        if key=="Comp.FrameFormat.Height" then return 1080 end
+        return nil
+    end
     function comp:SetActiveTool(tool) self.active = tool end
     function comp:StartUndo(label)
         expect(self.openUndo == nil, "Undo cannot be nested")
@@ -98,6 +103,8 @@ local function new_comp()
         t.Size = port("Size")
         t.Center = port("Center")
         t.WriteLength = port("WriteLength")
+        t.Width = port("Width")
+        t.Height = port("Height")
         t.TopLeftRed = port("TopLeftRed")
         t.TopLeftGreen = port("TopLeftGreen")
         t.TopLeftBlue = port("TopLeftBlue")
@@ -709,5 +716,42 @@ pulseButton()
 expect(pulseLayer.animations.Blend[236]==0,
     "re-applying Highlight Pulse rejects existing Spline without overwriting")
 _G.tool,_G.comp=previousTool,previousComp
+
+
+-- Marker Pop In must be independent from existing Object Opacity Fade,
+-- preserve geographic center, and use separate native Width/Height curves.
+local prePopCenterX,prePopCenterY=mask1.inputs.Center[1],mask1.inputs.Center[2]
+local prePopColor=control1.inputs.TopLeftRed
+local savePopTool,savePopComp=_G.tool,_G.comp
+_G.tool,_G.comp=control1,comp
+comp.CurrentTime=250
+control1.inputs.CR2PopDuration=18
+control1.inputs.CR2PopSizePixels=14
+local popButton=assert((loadstring or load)(
+    control1.UserControls.CR2MotionPop.BTNCS_Execute))
+popButton()
+expect(mask1.animations.Width[250]==0 and
+       mask1.animations.Height[250]==0,
+       "Pop starts at zero size without changing geoanchor")
+expect(math.abs(mask1.animations.Width[263]-
+       1.15*14/1920)<1e-10 and
+       math.abs(mask1.animations.Height[263]-
+       1.15*14/1080)<1e-10,
+       "Pop reaches 115 percent at the 70-percent integer frame")
+expect(math.abs(mask1.animations.Width[268]-14/1920)<1e-10 and
+       math.abs(mask1.animations.Height[268]-14/1080)<1e-10,
+       "Pop settles to requested output-pixel dimensions")
+expect(mask1.inputs.Center[1]==prePopCenterX and
+       mask1.inputs.Center[2]==prePopCenterY,
+       "Pop never moves author geographic coordinates")
+expect(control1.inputs.TopLeftRed==prePopColor and
+       merge1.animations.Blend[124]==1,
+       "Marker Pop does not overwrite Color or independent Fade In")
+expect(control1:GetData("CartoRigAtomic.MotionPopV2").presetId=="MO-MRK-02",
+       "Pop native curves are identified on the authored Marker Control")
+popButton()
+expect(mask1.animations.Width[268]==14/1920,
+       "Pop conflict prevents destructive overwrite of existing Size curves")
+_G.tool,_G.comp=savePopTool,savePopComp
 
 print("PASS: " .. checks .. " original Fusion graph / Control / Motion assertions")
