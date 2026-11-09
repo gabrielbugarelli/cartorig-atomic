@@ -106,7 +106,8 @@ end
 local function validate_graph(comp, scene)
     local base = object_tool(comp, scene, scene.sceneId, "base")
     local camera = object_tool(comp, scene, scene.cameraId, "camera")
-    local tail = object_tool(comp, scene, scene.tailId, "tail")
+    local tail = (scene.tailId == scene.sceneId) and base
+        or object_tool(comp, scene, scene.tailId, "merge")
     if not base or not camera or not tail then
         fail("SCENE_BROKEN", "Scene graph is incomplete. No modifications were made")
     end
@@ -201,8 +202,8 @@ local function add_object(comp, kind, name, lon, lat)
     lon, lat = validate_position(lon, lat)
     local scene = require_scene(comp)
     local _, camera, tail = validate_graph(comp, scene)
-    local id = next_id(scene)
     return undo(comp, "CartoRig: Add " .. kind, function()
+        local id = next_id(scene)
         local n = #scene.objects + 1
         local source
         if kind == "Marker" then
