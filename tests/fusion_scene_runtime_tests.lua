@@ -916,5 +916,31 @@ expect(#targetPose.featureIds==2 and
        "Fit Target persists explicit source identities and projection")
 expect(next(fitCamera.animations)==nil,
        "choosing Fit Targets does not generate any automatic keyframes")
+fitComp.CurrentTime=100
+function fitComp:GetAttrs()return {COMPN_RenderEnd=400}end
+fitCamera.inputs.CR2FitDuration=45
+local savedFitTool,savedFitComp=_G.tool,_G.comp
+_G.tool,_G.comp=fitCamera,fitComp
+local fitApply=assert((loadstring or load)(
+    fitCamera.UserControls.CR2MotionFit.BTNCS_Execute))
+fitApply()
+expect(fitCamera.animations.CR2CameraLongitude[100]==0 and
+       fitCamera.animations.CR2CameraLongitude[145]==180,
+       "Fit Transition animates independent longitude to the selected dateline extent")
+expect(fitCamera.animations.CR2CameraLatitude[100]==0 and
+       fitCamera.animations.CR2CameraLatitude[145]==.5,
+       "Fit Transition animates independent latitude to geographic bbox center")
+expect(fitCamera.animations.Size[100]==1 and
+       fitCamera.animations.Size[145]==targetPose.zoom,
+       "Fit Transition animates native Zoom to precomputed padded target pose")
+expect(fitCamera:GetData("CartoRigAtomic.MotionFitV2").presetId=="MO-CAM-03",
+       "Fit Transition persists genuine Fusion Spline motion identity")
+expect(#fitCamera:GetData("CartoRigAtomic.MotionFitV2").sourceIds==2,
+       "Fit retains explicitly chosen multi-object target identities")
+fitApply()
+expect(fitCamera.animations.Size[145]==targetPose.zoom,
+       "re-applying Fit Transition refuses to overwrite native Spline curves")
+_G.tool,_G.comp=savedFitTool,savedFitComp
+
 
 print("PASS: " .. checks .. " original Fusion graph / Control / Motion assertions")
