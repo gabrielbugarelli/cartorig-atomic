@@ -96,8 +96,7 @@ local function sorted_matches(rows, query, filter, limit)
     end
     for _, row in ipairs(rows) do
         if filter == nil or filter == "" or filter == "All" or
-            row.kind == filter or (filter == "Continent" and
-            normalize(row.continent) == query) then
+            row.kind == filter then
             local score = rank(row.searchName)
             for _, alias in ipairs(row.aliases) do
                 local aliasScore = rank(normalize(alias))
@@ -143,8 +142,26 @@ function M.from_lines(lines)
             places[#places + 1] = row
         end
     end
+    local actualCount = #places
+    local continents = {}
+    for _, row in ipairs(places) do
+        if row.continent ~= "" then
+            local key = normalize(row.continent)
+            if not continents[key] then
+                continents[key] = true
+                local virtual = {
+                    id = "ne10m:continent:" .. key, kind = "Continent",
+                    name = row.continent, parent = "", country = "",
+                    continent = row.continent, point = nil,
+                    aliases = {}, searchName = key
+                }
+                places[#places + 1] = virtual
+                ids[virtual.id] = virtual
+            end
+        end
+    end
     return {
-        count = #places,
+        count = actualCount,
         get = function(_, id) return ids[id] end,
         search = function(_, query, filter, limit)
             return sorted_matches(places, query, filter, limit)
