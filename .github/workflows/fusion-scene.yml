@@ -38,8 +38,10 @@ jobs:
         run: |
           luac5.4 -p fusion/cartorig_scene_runtime.lua
           luac5.4 -p fusion/cartorig_catalog.lua
+          luac5.4 -p fusion/cartorig_motion.lua
           lua5.4 tests/fusion_scene_runtime_tests.lua
           lua5.4 tests/fusion_catalog_tests.lua
+          lua5.4 tests/fusion_motion_tests.lua
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
