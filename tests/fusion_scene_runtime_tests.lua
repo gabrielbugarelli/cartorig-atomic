@@ -321,6 +321,9 @@ expect(type(groupId) == "string", "organizational Group has stable identity")
 expect(#runtime.inspect(comp).groups == 1, "Group appears in scene state")
 expect(runtime.inspect(comp).objects[1].groupId == groupId,
        "group membership persists independently from node properties")
+expect_failure(function()
+    runtime.create_group(comp,"Do not silently regroup",{marker1,label})
+end,"GROUP_CONFLICT")
 runtime.ungroup(comp, groupId)
 expect(#runtime.inspect(comp).groups == 0, "Ungroup deletes only organization")
 expect(runtime.inspect(comp).objects[1].groupId == nil,
