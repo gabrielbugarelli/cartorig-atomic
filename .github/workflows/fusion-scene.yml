@@ -1,0 +1,79 @@
+name: CartoRig Fusion - scene runtime and distribution
+
+on:
+  push:
+    branches: [feat/fusion-scene-runtime]
+    paths:
+      - 'fusion/**'
+      - 'tests/fusion_scene_runtime_tests.lua'
+      - 'tests/test_fusion_package.py'
+      - 'tools/package_fusion_scene.py'
+      - 'install/CartoRigAtomicFusionScene.iss'
+      - '.github/workflows/fusion-scene.yml'
+  pull_request:
+    paths:
+      - 'fusion/**'
+      - 'tests/fusion_scene_runtime_tests.lua'
+      - 'tests/test_fusion_package.py'
+      - 'tools/package_fusion_scene.py'
+      - 'install/CartoRigAtomicFusionScene.iss'
+      - '.github/workflows/fusion-scene.yml'
+  workflow_dispatch:
+
+jobs:
+  host-independent-lua:
+    name: Fusion scene contract and Lua runtime tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Lua 5.4 on CI only
+        run: sudo apt-get update -qq && sudo apt-get install -y lua5.4
+      - name: Check original Fusion Lua syntax
+        run: |
+          luac5.4 -p fusion/cartorig_scene_runtime.lua
+          lua5.4 tests/fusion_scene_runtime_tests.lua
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build self-contained Fusion Comp script
+        run: python tools/package_fusion_scene.py
+      - name: Check distributable Lua syntax
+        run: luac5.4 -p "dist/CartoRig Scene.lua"
+      - name: Run packaging regression tests
+        run: python -m unittest discover -s tests -p test_fusion_package.py -v
+      - name: Upload standalone developer script
+        uses: actions/upload-artifact@v4
+        with:
+          name: CartoRig-Atomic-Fusion-Scene-Script
+          path: dist/CartoRig Scene.lua
+          if-no-files-found: error
+
+  windows-installer:
+    name: One-click Windows developer installer
+    runs-on: windows-latest
+    needs: [host-independent-lua]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Assemble standalone Lua for Fusion
+        run: python tools/package_fusion_scene.py
+      - name: Verify packaged-script contracts on Windows
+        run: python -m unittest discover -s tests -p test_fusion_package.py -v
+      - name: Locate or install Inno Setup 6 on CI
+        shell: pwsh
+        run: |
+          $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) { choco install innosetup --no-progress -y }
+          if (-not (Test-Path $iscc)) { throw 'Inno Setup 6 is unavailable' }
+      - name: Create per-user graphical installer
+        shell: pwsh
+        run: |
+          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' install/CartoRigAtomicFusionScene.iss
+      - name: Publish graphical installer (development build)
+        uses: actions/upload-artifact@v4
+        with:
+          name: CartoRig-Atomic-Fusion-Scene-Windows-Dev
+          path: dist/installer/CartoRig-Atomic-Fusion-Scene-Windows-Dev.exe
+          if-no-files-found: error
