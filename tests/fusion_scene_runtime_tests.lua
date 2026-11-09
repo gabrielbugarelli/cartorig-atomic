@@ -191,6 +191,13 @@ expect(runtime.inspect(comp).objects[1].sourceRef.featureId=="ne10m:city:12345",
 expect(runtime.inspect(comp).objects[1].sourceRef.provider=="Natural Earth",
        "SourceRef carries explicit geographic provenance")
 expect(control1.links.EffectMask == mask1, "Marker is actually masked")
+expect(control1.inputs.TopLeftRed == 224/255 and
+       control1.inputs.TopLeftGreen == 232/255 and
+       control1.inputs.TopLeftBlue == 237/255,
+       "Marker defaults to approved neutral #E0E8ED, not orange")
+expect(math.abs(mask1.inputs.Width-14/1920)<1e-10 and
+       math.abs(mask1.inputs.Height-14/1080)<1e-10,
+       "Marker initializes a 14px circle under both output dimensions")
 expect(mask1.inputs.Center[1] > 0 and mask1.inputs.Center[2] > 0,
        "geographic coordinate projected to Fusion normalized space")
 expect(merge1.links.Background == base, "first object composited over base")
