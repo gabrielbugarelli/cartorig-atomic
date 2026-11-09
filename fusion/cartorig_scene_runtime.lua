@@ -797,11 +797,24 @@ function M.add_route(comp,origin,arrival,details)
         set_background_rgb(source,214/255,223/255,230/255)
         attach_inspector_motion(source,"Route")
         local previousMask
+        local lengths={}
         for i,segment in ipairs(segments) do
+            local role="shape"..tostring(n*100+i)
             local mask=make_mask(comp,scene,id,n*100+i,segment,false,3/1920,"Add")
+            if mask:SetInput("WriteLength",1)==false then
+                fail("HOST_MASK","Route mask has no native Write Length control")
+            end
             if previousMask then checked_link(mask,"EffectMask",previousMask) end
             previousMask=mask
+            local length=0
+            for p=2,#segment do
+                local a,b=segment[p-1],segment[p]
+                local dx,dy=(b.lon-a.lon)/360,(b.lat-a.lat)/180
+                length=length+math.sqrt(dx*dx+dy*dy)
+            end
+            lengths[#lengths+1]={role=role,length=length}
         end
+        source:SetData("CartoRigAtomic.RouteSegmentsV2",lengths)
         checked_link(source,"EffectMask",previousMask)
         add_composite(comp,scene,id,source,n)
         scene.objects[#scene.objects+1]={
