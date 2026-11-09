@@ -56,8 +56,9 @@ for id,descriptor in pairs(all) do
     yes(plan.startFrame==100 and plan.endFrame<=499,
         "actual Fusion-frame key windows must be finite and valid")
     for _,channel in ipairs(plan.channels) do
-        yes(channel.keys[1].frame==plan.startFrame,
-            "first key lands on requested integer frame")
+        yes(channel.keys[1].frame==plan.startFrame or
+            (id=="MO-REG-04" and channel.keys[1].frame==plan.startFrame-1),
+            "first key lands at requested frame or intentional prior Hold frame")
         yes(channel.keys[#channel.keys].frame==plan.endFrame,
             "last key lands on expected integer frame")
     end
