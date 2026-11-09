@@ -639,4 +639,32 @@ expect(find(comp,instantId,"merge").animations.Blend==nil,
        "Instant Color Change never creates an opacity keyframe")
 _G.tool,_G.comp=saveColorTool,saveColorComp
 
+
+-- Region Border Draw reveals physical contour length, not RGBA or Blend.
+local regionControlForBorder=instantControl
+local borderParts=regionControlForBorder:GetData(
+    "CartoRigAtomic.RegionStrokeSegmentsV2")
+expect(type(borderParts)=="table" and #borderParts==3,
+       "three independent Region rings have deterministic contour identities")
+comp.CurrentTime=150
+regionControlForBorder.inputs.CR2BorderDuration=36
+local oldBorderTool,oldBorderComp=_G.tool,_G.comp
+_G.tool,_G.comp=regionControlForBorder,comp
+local borderButton=assert((loadstring or load)(
+    regionControlForBorder.UserControls.CR2MotionBorderDraw.BTNCS_Execute))
+borderButton()
+local borderFirst=find(comp,instantId,borderParts[1].role)
+local borderLast=find(comp,instantId,borderParts[#borderParts].role)
+expect(borderFirst.animations.WriteLength[150]==0,
+       "Region Border Draw starts at zero progress")
+expect(borderLast.animations.WriteLength[186]==1,
+       "Region Border Draw completes all rings at the exact final frame")
+expect(regionControlForBorder:GetData("CartoRigAtomic.MotionBorderV2").presetId==
+       "MO-REG-05","Border Draw owns independent native Spline provenance")
+expect(regionControlForBorder.animations.TopLeftRed[390]==0,
+       "Border Draw leaves existing independent Fill Color animation intact")
+expect(find(comp,instantId,"merge").animations.Blend==nil,
+       "Border Draw does not accidentally animate Object Opacity")
+_G.tool,_G.comp=oldBorderTool,oldBorderComp
+
 print("PASS: " .. checks .. " original Fusion graph / Control / Motion assertions")
