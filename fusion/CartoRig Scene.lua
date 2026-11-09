@@ -89,10 +89,16 @@ local window = dispatcher:AddWindow({
         ui:Button{ ID = "Lock", Text = "Lock" },
         ui:Button{ ID = "Unlock", Text = "Unlock" }
     },
+    ui:Button{ ID = "Delete", Text = "Delete Selected (Confirm)" },
+    ui:Label{ Text = "ORGANIZE OBJECTS INTO GROUPS" },
     ui:HGroup{
-        ui:Button{ ID = "Group", Text = "Group Selected" },
-        ui:Button{ ID = "Delete", Text = "Delete (Confirm)" }
+        ui:Button{ ID = "StageGroup", Text = "+ Add Selected Object" },
+        ui:Button{ ID = "ClearGroupStage", Text = "Clear Selection" },
+        ui:Button{ ID = "Group", Text = "Create Group" }
     },
+    ui:Label{ ID = "GroupSelectionLabel", Text = "Group selection: none" },
+    ui:Combo{ ID = "ExistingGroups" },
+    ui:Button{ ID = "Ungroup", Text = "Ungroup Chosen Group" },
     ui:Label{ Text = "ROUTE FOLLOWER — SELECT EXISTING MARKER" },
     ui:Combo{ ID = "FollowerMarker" },
     ui:HGroup{
@@ -141,6 +147,8 @@ local catalog = nil
 local geometryIndex = nil
 local routeStart,routeState,routeArrival = nil,nil,nil
 local fitItems,fitComp = {},nil
+local groupStages,groupComp = {},nil
+local groupChoices = {}
 local dataIssue = nil
 local selectedObjectId = nil
 local pendingDelete = nil
@@ -197,13 +205,20 @@ local function sync()
     binding = nil
     choices = {}
     followerChoices = {}
+    groupChoices = {}
     items.Objects:Clear()
     items.FollowerMarker:Clear()
+    items.ExistingGroups:Clear()
     local active=current_comp and current_comp() or nil
     if active~=fitComp then
         fitItems={}
         fitComp=active
         items.FitSelectionLabel.Text="Fit selection: none"
+    end
+    if active~=groupComp then
+        groupStages={}
+        groupComp=active
+        items.GroupSelectionLabel.Text="Group selection: none"
     end
     if not current then
         items.Composition.Text = "Composition: none"
@@ -227,7 +242,16 @@ local function sync()
     items.DisplayMode.CurrentIndex=state.displayMode=="Transparent Overlay" and 1 or 0
     items.State.Text = "State: " .. state.state
     local groups = {}
-    for _, group in ipairs(state.groups or {}) do groups[group.id] = group.name end
+    for _,group in ipairs(state.groups or {}) do
+        groups[group.id]=group.name
+        groupChoices[#groupChoices+1]=group.id
+        items.ExistingGroups:AddItem(group.name)
+    end
+    if #groupChoices==0 then
+        items.ExistingGroups:AddItem("No authored Groups")
+    else
+        items.ExistingGroups.CurrentIndex=0
+    end
     local selectIndex = 0
     for i, object in ipairs(state.objects) do
         choices[#choices+1] = object.id
@@ -637,9 +661,60 @@ function window.On.Unlock.Clicked(_)
         return Runtime.set_lock(comp, selected_id(), false)
     end)
 end
+local function show_group_stage()
+    local names={}
+    for _,entry in ipairs(groupStages) do
+        names[#names+1]=entry.name
+    end
+    items.GroupSelectionLabel.Text=#names==0 and "Group selection: none"
+        or ("Selected ("..#names.."): "..table.concat(names,", "))
+end
+function window.On.StageGroup.Clicked(_)
+    local selected=selected_id()
+    for _,entry in ipairs(groupStages) do
+        if entry.id==selected then
+            feedback("GROUP_DUPLICATE: Object is already selected.")
+            return
+        end
+    end
+    local comp=require_current()
+    local state=Runtime.inspect(comp)
+    for _,object in ipairs(state.objects) do
+        if object.id==selected then
+            if object.locked or object.groupId then
+                feedback("GROUP_CONFLICT: Unlock or ungroup selected object first.")
+                return
+            end
+            groupStages[#groupStages+1]={id=selected,name=object.name}
+            show_group_stage()
+            return
+        end
+    end
+    feedback("OBJECT_MISSING: Refresh Scene and select another object.")
+end
+function window.On.ClearGroupStage.Clicked(_)
+    groupStages={}
+    show_group_stage()
+end
 function window.On.Group.Clicked(_)
     handle(function(comp)
-        return Runtime.create_group(comp, items.Name.Text, { selected_id() })
+        if #groupStages<2 then
+            error("GROUP_SELECTION: Select at least two objects for one Group",0)
+        end
+        local ids={}
+        for _,entry in ipairs(groupStages) do ids[#ids+1]=entry.id end
+        local groupId=Runtime.create_group(comp,items.Name.Text,ids)
+        groupStages={}
+        show_group_stage()
+        return groupId
+    end)
+end
+function window.On.Ungroup.Clicked(_)
+    handle(function(comp)
+        local index=tonumber(items.ExistingGroups.CurrentIndex) or -1
+        local id=groupChoices[index+1]
+        if not id then error("GROUP_MISSING: Select an existing Group",0) end
+        return Runtime.ungroup(comp,id)
     end)
 end
 function window.On.Delete.Clicked(_)
