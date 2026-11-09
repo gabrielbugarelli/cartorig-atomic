@@ -1824,6 +1824,98 @@ function M.focus(comp, lon, lat, zoom)
 end
 
 
+-- Compute a deterministic minimum containing equirectangular viewport.
+-- The largest-gap complement avoids treating a +179/-179 target as a
+-- 358-degree-wide selection. No viewer handles or playback state required.
+function M.compute_fit(targets,padding)
+    if type(targets)~="table" or #targets<1 then
+        fail("FIT_TARGET_REQUIRED","Choose at least one explicit geographic target")
+    end
+    padding=padding==nil and .10 or tonumber(padding)
+    if not padding or padding~=padding or padding<0 or padding>.30 then
+        fail("INVALID_PADDING","Fit padding must be 0..30 percent")
+    end
+    local longitudes={}
+    local minLat,maxLat=90,-90
+    local names={}
+    local function add_point(lon,lat)
+        lon,lat=validate_position(lon,lat)
+        longitudes[#longitudes+1]=(lon+360)%360
+        if lat<minLat then minLat=lat end
+        if lat>maxLat then maxLat=lat end
+    end
+    for _,target in ipairs(targets) do
+        if type(target)~="table" or
+           type(target.id)~="string" or not target.id:match("^ne10m:") then
+            fail("FIT_TARGET_REQUIRED","Every target needs an offline Natural Earth ID")
+        end
+        names[#names+1]=target.id
+        if target.point then
+            add_point(target.point.lon,target.point.lat)
+        elseif target.geometry and type(target.geometry.rings)=="table" then
+            if #target.geometry.rings<1 or target.geometry.id~=target.id then
+                fail("NO_GEOMETRY","Region geometry does not match selected target")
+            end
+            for _,ring in ipairs(target.geometry.rings) do
+                if type(ring.vertices)~="table" or #ring.vertices<3 then
+                    fail("GEOMETRY_FORMAT","Cannot fit an incomplete polygon")
+                end
+                for _,point in ipairs(ring.vertices) do
+                    add_point(point.lon,point.lat)
+                end
+            end
+        else
+            fail("FIT_TARGET_REQUIRED","Target has no Point or matching Polygon")
+        end
+    end
+    table.sort(longitudes)
+    local count=#longitudes
+    if count<1 then fail("FIT_TARGET_REQUIRED","No valid geographic coordinates") end
+    local largestGap,index=-1,1
+    for i=1,count do
+        local nextLon=(i==count and longitudes[1]+360) or longitudes[i+1]
+        local gap=nextLon-longitudes[i]
+        if gap>largestGap then largestGap,index=gap,i end
+    end
+    local left=longitudes[(index%count)+1]
+    local widthDegrees=math.max(0,360-largestGap)
+    local centerLongitude=(left+widthDegrees/2)%360
+    if centerLongitude>180 then centerLongitude=centerLongitude-360 end
+    local latitude=(minLat+maxLat)/2
+    local latFraction=(maxLat-minLat)/180
+    local lonFraction=widthDegrees/360
+    local biggest=math.max(latFraction,lonFraction)
+    local zoom=(biggest<1e-10) and 4 or
+        math.min(100,(1-2*padding)/biggest)
+    if zoom<.25 then
+        fail("FIT_BOUNDS","Requested targets cannot fit with the chosen padding")
+    end
+    return {
+        longitude=centerLongitude,latitude=latitude,zoom=zoom,
+        padding=padding,sourceIds=names,
+        longitudeSpanDegrees=widthDegrees,
+        latitudeSpanDegrees=maxLat-minLat,
+        projection="Equirectangular",referencePoint=(biggest<1e-10)
+    }
+end
+
+function M.set_fit_target(comp,targets,padding)
+    local target=M.compute_fit(targets,padding)
+    local scene=require_scene(comp)
+    local _,camera=validate_graph(comp,scene)
+    return undo(comp,"CartoRig: Choose Fit Targets",function()
+        camera:SetData("CartoRigAtomic.CameraFitTargetV2",{
+            schemaVersion=2,featureIds=copy_table(target.sourceIds),
+            longitude=target.longitude,latitude=target.latitude,
+            zoom=target.zoom,padding=target.padding,
+            projection=target.projection,
+            spanLon=target.longitudeSpanDegrees,
+            spanLat=target.latitudeSpanDegrees
+        })
+        return true
+    end)
+end
+
 function M.set_fly_target(comp,feature,zoom)
     if type(feature)~="table" or feature.kind~="City" or
        type(feature.id)~="string" or not feature.id:match("^ne10m:city:") or
