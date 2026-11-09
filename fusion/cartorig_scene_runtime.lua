@@ -2074,6 +2074,9 @@ function M.create_group(comp, name, selectedIds)
         unique[id] = true
         local _, obj = object_index(scene, id)
         ensure_unlocked(obj)
+        if obj.groupId then
+            fail("GROUP_CONFLICT","Ungroup existing parent before regrouping")
+        end
         selections[#selections+1] = obj
     end
     return undo(comp, "CartoRig: Group Objects", function()
