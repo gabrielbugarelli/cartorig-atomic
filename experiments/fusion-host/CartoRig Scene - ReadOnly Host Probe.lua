@@ -30,7 +30,11 @@ local windowId = "CartoRigSceneHostProbeV2"
 local lookupOk, existing = pcall(function()
     return ui:FindWindow(windowId)
 end)
-if lookupOk and existing then
+if not lookupOk then
+    print("CartoRig Host Probe: cannot confirm single-window identity (FindWindow unavailable).")
+    return
+end
+if existing then
     existing:Show()
     return
 end
@@ -84,11 +88,11 @@ local function currentComposition()
     local appComp
     local ok = pcall(function() appComp = fusionApp.CurrentComp end)
     if ok and appComp then
-        return appComp
+        return appComp, true
     end
-    -- The Comp script's initial comp is a fallback, NOT evidence that a
-    -- composition switch has been detected. Explicitly label this situation.
-    return rawget(_G, "comp")
+    -- The script's initial comp is only a launch-context hint. It cannot
+    -- certify the active composition after a switch.
+    return rawget(_G, "comp"), false
 end
 
 local initialComp = rawget(_G, "comp")
@@ -108,11 +112,18 @@ local function currentToolName(active)
 end
 
 local function refresh()
-    local active = currentComposition()
+    local active, verified = currentComposition()
     if not active then
         items.ContextState.Text = "NO_COMP — No Fusion composition selected"
         items.CompIdentity.Text = "No scene was initialized."
         items.SelectedTool.Text = "Selected Fusion tool: none"
+        return
+    end
+
+    if not verified then
+        items.ContextState.Text = "CONTEXT_UNVERIFIED — CurrentComp API unavailable"
+        items.CompIdentity.Text = "Original script composition only; cannot safely follow switches."
+        items.SelectedTool.Text = "Selected Fusion tool: invalidated"
         return
     end
 
