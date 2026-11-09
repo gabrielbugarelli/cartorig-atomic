@@ -1692,22 +1692,41 @@ function M.select(comp, objectId)
 end
 
 function M.focus(comp, lon, lat, zoom)
-    lon, lat = validate_position(lon, lat)
-    zoom = tonumber(zoom)
-    if not zoom or zoom < 0.25 or zoom > 100 or zoom ~= zoom then
-        fail("INVALID_ZOOM", "Zoom must be between 0.25 and 100")
+    lon,lat=validate_position(lon,lat)
+    if zoom~=nil then
+        zoom=tonumber(zoom)
+        if not zoom or zoom<.25 or zoom>100 or zoom~=zoom then
+            fail("INVALID_ZOOM","Camera Zoom must be 0.25..100")
+        end
     end
-    local scene = require_scene(comp)
-    local _, camera = validate_graph(comp, scene)
-    local pos = coords(lon, lat)
-    return undo(comp, "CartoRig: Focus Camera", function()
-        -- Transform is evaluated by Fusion; the camera is a genuine node
-        -- and every authored geographic layer shares the same transform.
-        camera:SetInput("Size", zoom)
-        camera:SetInput("Center", point(
-            0.5 + (0.5 - pos[1]) * zoom,
-            0.5 + (0.5 - pos[2]) * zoom
-        ))
+    local scene=require_scene(comp)
+    local _,camera=validate_graph(comp,scene)
+    -- Static Focus may never silently replace a manually edited Spline
+    -- or an authored Fly To / Fit Transition curve.
+    local channels={"CR2CameraLongitude","CR2CameraLatitude"}
+    if zoom~=nil then channels[#channels+1]="Size" end
+    for _,name in ipairs(channels) do
+        local input=camera[name]
+        if not input then
+            fail("HOST_CAMERA","Missing native geographic Camera input "..name)
+        end
+        local ok,connected=pcall(function()
+            return input:GetConnectedOutput()
+        end)
+        if not ok then
+            fail("HOST_CAMERA","Cannot inspect existing "..name.." animation")
+        end
+        if connected~=nil then
+            fail("MOTION_CONFLICT","Camera "..name..
+                " is already animated; edit keys in the Fusion Spline")
+        end
+    end
+    return undo(comp,"CartoRig: Focus Camera",function()
+        -- Center is derived by its host-owned Point Expression. No script
+        -- iterates frames or moves map objects individually.
+        camera:SetInput("CR2CameraLongitude",lon)
+        camera:SetInput("CR2CameraLatitude",lat)
+        if zoom~=nil then camera:SetInput("Size",zoom) end
         return true
     end)
 end
