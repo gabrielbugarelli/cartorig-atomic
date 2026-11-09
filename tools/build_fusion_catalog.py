@@ -141,7 +141,7 @@ def encode_record(kind: str, attrs: dict, shape, index: int,
     ]
     safe_fields = [escape(value) for value in values[:-1]]
     safe_aliases = values[-1].replace("\t", " ").replace("\r", " ").replace("\n", " ")
-    return "\t".join(safe_fields + [safe_aliases]))
+    return "\t".join(safe_fields + [safe_aliases])
 
 
 def build(output: Path, cache: Path) -> dict:
