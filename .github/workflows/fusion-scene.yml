@@ -33,7 +33,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install Lua 5.4 on CI only
-        run: sudo apt-get update -qq && sudo apt-get install -y lua5.4
+        run: sudo apt-get update -qq && sudo apt-get install -y lua5.1 lua5.4
       - name: Check original Fusion Lua syntax
         run: |
           luac5.4 -p fusion/cartorig_scene_runtime.lua
@@ -42,13 +42,21 @@ jobs:
           lua5.4 tests/fusion_scene_runtime_tests.lua
           lua5.4 tests/fusion_catalog_tests.lua
           lua5.4 tests/fusion_motion_tests.lua
+          luac5.1 -p fusion/cartorig_scene_runtime.lua
+          luac5.1 -p fusion/cartorig_catalog.lua
+          luac5.1 -p fusion/cartorig_motion.lua
+          lua5.1 tests/fusion_scene_runtime_tests.lua
+          lua5.1 tests/fusion_catalog_tests.lua
+          lua5.1 tests/fusion_motion_tests.lua
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - name: Build self-contained Fusion Comp script
         run: python tools/package_fusion_scene.py
-      - name: Check distributable Lua syntax
-        run: luac5.4 -p "dist/CartoRig Scene.lua"
+      - name: Check distributable Fusion Lua syntax (5.1 + 5.4)
+        run: |
+          luac5.1 -p "dist/CartoRig Scene.lua"
+          luac5.4 -p "dist/CartoRig Scene.lua"
       - name: Run packaging regression tests
         run: python -m unittest discover -s tests -p test_fusion_package.py -v
       - name: Upload standalone developer script
