@@ -74,6 +74,23 @@ class FusionSceneNavigationTests(unittest.TestCase):
         self.assertGreater(self.ui.index('ID = "Feedback"'),
                            self.ui.index('ID = "ScenePageGroups"'))
 
+    def test_object_combobox_selects_real_host_tool_and_handles_foreign_node(self):
+        self.assertIn('window.On.Objects.CurrentIndexChanged(_)', self.code)
+        self.assertIn('pcall(Runtime.select, current, id)', self.code)
+        self.assertIn('pcall(Runtime.active_selection, current)', self.code)
+        self.assertIn('selectionStatus = "OBJECT"', self.code)
+        self.assertIn('selectionStatus == "NON_CARTORIG"', self.code)
+        self.assertIn('items.Objects.CurrentIndex = -1', self.code)
+        self.assertIn('updatingScene = false', self.code)
+        self.assertIn('if updatingScene then return end', self.code)
+        self.assertIn('NON_CARTORIG_SELECTION:', self.code)
+
+    def test_new_objects_reveal_in_fusion_without_selecting_group_as_tool(self):
+        self.assertIn('if object.id == result then', self.code)
+        self.assertIn('local chosen = pcall(Runtime.select, current, result)', self.code)
+        self.assertIn('selectedObjectId = result', self.code)
+        self.assertIn('pendingDelete = nil', self.code)
+
     def test_scene_does_not_provide_duplicate_timeline_or_motion_editor(self):
         self.assertNotIn('ID = "StartFrame"', self.ui)
         self.assertNotIn('ID = "Duration"', self.ui)
