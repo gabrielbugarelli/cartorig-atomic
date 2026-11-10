@@ -2158,6 +2158,237 @@ end
 -- Read the host Node Editor's current selection without mutating the
 -- composition. The stable scene/object identity is authoritative; tool names
 -- may have been edited by the user and are not sufficient for binding.
+-- Duplicate is a new, independent authoring object. It reconstructs the
+-- original geometry from the immutable offline source, then copies each
+-- supported native Fusion channel (including its editable Spline keys).
+-- The snapshot is checked BEFORE creating any new nodes.
+local duplicate_inputs={
+    control={
+        "TopLeftRed","TopLeftGreen","TopLeftBlue","TopLeftAlpha",
+        "StyledText","Center","Size","Red1","Green1","Blue1","Alpha1",
+        "CR2MotionDuration","CR2ColorChosen","CR2TargetRed","CR2TargetGreen",
+        "CR2TargetBlue","CR2TargetAlpha","CR2PopDuration","CR2PopSizePixels",
+        "CR2PulseCount","CR2PulseCycle","CR2PulseStrength",
+        "CR2BorderDuration","CR2FollowerProgress",
+    },
+    merge={"Blend"},
+    render={"Blend"},
+    border={"TopLeftRed","TopLeftGreen","TopLeftBlue","TopLeftAlpha"},
+    highlight={"TopLeftRed","TopLeftGreen","TopLeftBlue","TopLeftAlpha"},
+    mask={"Center","Width","Height"},
+    shape={"WriteLength","BorderWidth","Solid","PaintMode"},
+}
+local duplicate_metadata={
+    "CartoRigAtomic.MotionBindingV2",
+    "CartoRigAtomic.MotionBindingsV2",
+    "CartoRigAtomic.MotionBorderV2",
+    "CartoRigAtomic.MotionHighlightV2",
+    "CartoRigAtomic.MotionPopV2",
+}
+local function owned_role_map(comp,scene,objectId)
+    local roles,shapes={},{}
+    for _,tool in pairs(comp:GetToolList(false) or {}) do
+        local ok,tag=pcall(function()return tool:GetData(TOOL_KEY)end)
+        if ok and type(tag)=="table" and
+           tag.sceneId==scene.sceneId and tag.objectId==objectId then
+            if type(tag.role)~="string" or roles[tag.role] then
+                fail("DUPLICATE_GRAPH","Ambiguous owned Fusion tool role")
+            end
+            roles[tag.role]=tool
+            local numeric=tag.role:match("^shape(%d+)$")
+            if numeric then shapes[#shapes+1]={role=tag.role,n=tonumber(numeric)} end
+        end
+    end
+    table.sort(shapes,function(a,b)return a.n<b.n end)
+    return roles,shapes
+end
+
+local function read_channel_snapshot(tool,name)
+    local input=tool[name]
+    if not input then return nil end -- host does not expose this optional field
+    local ok,expression=pcall(function()return input:GetExpression()end)
+    if not ok then fail("DUPLICATE_CHANNEL","Cannot inspect native expression "..name) end
+    if expression and expression~="" then
+        fail("DUPLICATE_EXPRESSION",
+            "A custom expression needs manual review before duplicating "..name)
+    end
+    local connectedOk,output=pcall(function()
+        return input:GetConnectedOutput()
+    end)
+    if not connectedOk then
+        fail("DUPLICATE_CHANNEL","Cannot inspect native channel "..name)
+    end
+    if output then
+        local got,modifier=pcall(function()return output:GetTool()end)
+        if not got or not modifier or
+           (modifier.ID and modifier.ID~="BezierSpline") or
+           type(modifier.GetKeyFrames)~="function" then
+            fail("DUPLICATE_MODIFIER",
+                "Unsupported modifier on "..name.."; no changes made")
+        end
+        local valid,keys=pcall(function()return modifier:GetKeyFrames()end)
+        if not valid or type(keys)~="table" or next(keys)==nil then
+            fail("DUPLICATE_MODIFIER","Cannot retrieve authored keys for "..name)
+        end
+        return {keys=copy_table(keys)}
+    end
+    local value=tool:GetInput(name)
+    if value==nil then return nil end
+    return {value=copy_table(value)}
+end
+
+local function snapshot_owned(comp,scene,object)
+    local roles,shapes=owned_role_map(comp,scene,object.id)
+    if not roles.control or not roles.merge then
+        fail("SCENE_BROKEN","Object has no duplicate-safe Control/Merge tools")
+    end
+    local saved={}
+    for role,tool in pairs(roles) do
+        local kind=role:match("^shape%d+$") and "shape" or role
+        local inputs=duplicate_inputs[kind] or {}
+        local record={channels={},metadata={}}
+        for _,name in ipairs(inputs) do
+            local snapshot=read_channel_snapshot(tool,name)
+            if snapshot then record.channels[name]=snapshot end
+        end
+        for _,name in ipairs(duplicate_metadata) do
+            local ok,value=pcall(function()return tool:GetData(name)end)
+            if ok and value~=nil then record.metadata[name]=copy_table(value) end
+        end
+        saved[role]=record
+    end
+    return saved,shapes
+end
+
+local function apply_owned_snapshot(comp,scene,newId,saved,originalShapes)
+    local targets,targetShapes=owned_role_map(comp,scene,newId)
+    if #originalShapes~=#targetShapes then
+        fail("DUPLICATE_GRAPH","New geometry does not have matching ring roles")
+    end
+    for originalRole,record in pairs(saved) do
+        local targetRole=originalRole
+        local originalShape=originalRole:match("^shape%d+$")
+        if originalShape then
+            local index
+            for i,item in ipairs(originalShapes) do
+                if item.role==originalRole then index=i break end
+            end
+            targetRole=index and targetShapes[index].role or nil
+        end
+        local tool=targetRole and targets[targetRole] or nil
+        if not tool then
+            fail("DUPLICATE_GRAPH","Missing destination node for "..originalRole)
+        end
+        for name,channel in pairs(record.channels) do
+            if channel.keys then
+                local input=tool[name]
+                if not input or not tool:AddModifier(name,"BezierSpline") then
+                    fail("DUPLICATE_MODIFIER",
+                        "Cannot create independent native keys for "..name)
+                end
+                local output=input:GetConnectedOutput()
+                local modifier=output and output:GetTool()
+                if not modifier or not modifier.SetKeyFrames or
+                   modifier:SetKeyFrames(copy_table(channel.keys),true)==false then
+                    fail("DUPLICATE_MODIFIER",
+                        "Fusion refused independent keyframes for "..name)
+                end
+            else
+                if tool:SetInput(name,copy_table(channel.value))==false then
+                    fail("DUPLICATE_CHANNEL",
+                        "Fusion refused duplicated Control value "..name)
+                end
+            end
+        end
+        for name,value in pairs(record.metadata) do
+            tool:SetData(name,copy_table(value))
+        end
+    end
+end
+
+function M.duplicate(comp,objectId,geometryIndex)
+    local scene=require_scene(comp)
+    validate_graph(comp,scene)
+    local _,source=object_index(scene,objectId)
+    ensure_unlocked(source)
+    if source.followerMarkerId or source.followingRouteId then
+        fail("DUPLICATE_LINK",
+            "Unlink the Route follower before duplicating either object")
+    end
+    local saved,shapes=snapshot_owned(comp,scene,source)
+    local title=safe_name(source.name.." Copy")
+    local args
+    if source.kind=="Marker" or source.kind=="Label" then
+        if source.lon==nil or source.lat==nil then
+            fail("DUPLICATE_SOURCE","Original geographic anchor is missing")
+        end
+        if source.sourceRef and source.sourceRef.provider=="Natural Earth" then
+            args={id=source.sourceRef.featureId,kind="City",
+                name=source.sourceRef.name or source.name,
+                parent=source.sourceRef.parent,country=source.sourceRef.country,
+                point={lon=source.lon,lat=source.lat}}
+        end
+    elseif source.kind=="Region" then
+        if not geometryIndex or type(geometryIndex.get)~="function" then
+            fail("NO_GEOMETRY","Offline polygon pack is required to duplicate Region")
+        end
+        local ref=source.sourceRef
+        local geometry=ref and geometryIndex:get(ref.featureId)
+        if not geometry then
+            fail("NO_GEOMETRY","Cannot recover original Natural Earth polygon")
+        end
+        args={geometry=geometry,feature={
+            id=ref.featureId,kind=ref.featureType,name=title,
+            country=ref.country,parent=ref.parent}}
+    elseif source.kind=="Route" then
+        local route=source.route
+        if type(route)~="table" or not route.from or not route.to then
+            fail("DUPLICATE_SOURCE","Original Route endpoints are missing")
+        end
+        args={route=copy_table(route)}
+        if route.destinationStateId then
+            if not geometryIndex then
+                fail("NO_GEOMETRY","Offline destination State is required")
+            end
+            args.stateGeometry=geometryIndex:get(route.destinationStateId)
+            if not args.stateGeometry then
+                fail("NO_GEOMETRY","Original route State polygon was not found")
+            end
+        end
+    else
+        fail("DUPLICATE_UNSUPPORTED","This object type cannot be duplicated")
+    end
+    local sourceId=source.id
+    return undo(comp,"CartoRig: Duplicate Object",function()
+        local newId
+        if source.kind=="Marker" then
+            newId=M.add_marker(comp,title,source.lon,source.lat,args)
+        elseif source.kind=="Label" then
+            newId=M.add_label(comp,title,source.lon,source.lat,args)
+        elseif source.kind=="Region" then
+            newId=M.add_region(comp,args.feature,args.geometry)
+        else
+            local route=args.route
+            local state=route.destinationStateId and
+                {id=route.destinationStateId} or nil
+            newId=M.add_route(comp,
+                {id=route.from.sourceId,name="Origin",
+                 lon=route.from.lon,lat=route.from.lat},
+                {id=route.to.sourceId,name="Destination",
+                 lon=route.to.lon,lat=route.to.lat},
+                {name=title,pathType=route.pathType,
+                 curvature=route.curvature,destinationState=state,
+                 destinationGeometry=args.stateGeometry})
+        end
+        local fresh=require_scene(comp)
+        apply_owned_snapshot(comp,fresh,newId,saved,shapes)
+        local _,newObject=object_index(fresh,newId)
+        newObject.duplicateOf=sourceId
+        comp:SetData(SCENE_KEY,fresh)
+        return newId
+    end)
+end
+
 function M.active_selection(comp)
     local scene = get_scene(comp)
     if not scene then return {state="NO_SCENE"} end
