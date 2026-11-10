@@ -560,8 +560,8 @@ end,"ENDPOINT_OUTSIDE_STATE")
 local routeId=runtime.add_route(comp,origin,arrival,
     {destinationState=state,destinationGeometry=statePolygon,pathType="Curved"})
 local routeControl=find(comp,routeId,"control")
-local routePath=find(comp,routeId,"shape"..tostring(#comp:GetData(
-    "CartoRigAtomic.SceneV2").objects))
+local routeParts=routeControl:GetData("CartoRigAtomic.RouteSegmentsV2")
+local routePath=find(comp,routeId,routeParts[1].role)
 local routeObject=runtime.inspect(comp).objects[#runtime.inspect(comp).objects]
 expect(routeObject.kind=="Route","route has a distinct author object identity")
 local routeMeta=comp:GetData("CartoRigAtomic.SceneV2").objects[
