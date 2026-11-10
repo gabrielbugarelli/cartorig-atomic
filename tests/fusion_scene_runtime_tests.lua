@@ -107,7 +107,13 @@ local function new_comp()
                         return true
                     end
                     function spline:GetKeyFrames()
-                        return (t.splineKeyframes or {})[name] or {}
+                        local exact=(t.splineKeyframes or {})[name]
+                        if exact then return exact end
+                        local keys={}
+                        for frame,value in pairs(t.animations[name] or {}) do
+                            keys[frame]={value}
+                        end
+                        return keys
                     end
                     return { GetTool = function() return spline end }
                 end
@@ -1064,5 +1070,100 @@ expect(followRoute:GetData("CartoRigAtomic.MotionFollowerV2").state==
        "Unlinked follower retains native keys explicitly labelled manual")
 expect(runtime.inspect(comp).objects[1].followingRouteId==nil,
        "scene no longer contains a stale follower marker reference")
+
+
+-- Duplicate creates an independently authored Fusion object, preserving
+-- its original source reference, style, and native BezierSpline keys.
+local copyComp=new_comp()
+copyComp:AddTool("MediaOut")
+runtime.create(copyComp)
+local originalId=runtime.add_marker(copyComp,"São Paulo",-46.6333,-23.5505)
+local originalControl=find(copyComp,originalId,"control")
+local originalMask=find(copyComp,originalId,"mask")
+local originalMerge=find(copyComp,originalId,"merge")
+originalControl:SetInput("TopLeftRed",.125)
+originalMask:AddModifier("Width","BezierSpline")
+originalMask:SetInput("Width",0,20)
+originalMask:SetInput("Width",.018,40)
+runtime.fade_in(copyComp,originalId,20,20)
+originalControl:SetData("CartoRigAtomic.MotionBindingsV2",{
+    ["Object Opacity"]={presetId="MO-MRK-01"}
+})
+local beforeCopyUndo=#copyComp.undo
+local duplicatedId=runtime.duplicate(copyComp,originalId)
+expect(duplicatedId~=originalId,
+       "duplicate receives a fresh authored object ID")
+expect(#copyComp.undo==beforeCopyUndo+1 and
+       copyComp.undo[#copyComp.undo].label=="CartoRig: Duplicate Object",
+       "cloning all subtools and their curves is ONE Fusion Undo step")
+local dupeCtrl=find(copyComp,duplicatedId,"control")
+local dupeMask=find(copyComp,duplicatedId,"mask")
+local dupeMerge=find(copyComp,duplicatedId,"merge")
+expect(dupeCtrl.inputs.TopLeftRed==.125,
+       "duplicate copies the actual overridden Fill Color")
+expect(dupeMask.animations.Width[20]==0 and
+       dupeMask.animations.Width[40]==.018,
+       "duplicate preserves independent native Marker Size keys")
+expect(dupeMerge.animations.Blend[20]==0 and
+       dupeMerge.animations.Blend[40]==1,
+       "duplicate preserves native Fade In keys at original frames")
+expect(find(copyComp,originalId,"merge")==originalMerge,
+       "original Fusion tool remains independently authored")
+local snapshot=runtime.inspect(copyComp)
+expect(#snapshot.objects==2 and snapshot.objects[2].id==duplicatedId,
+       "duplicate is separately listed in Scene order")
+expect(dupeCtrl:GetData("CartoRigAtomic.MotionBindingsV2")["Object Opacity"]
+       .presetId=="MO-MRK-01",
+       "duplicate persists independent Motion provenance")
+dupeCtrl:GetData("CartoRigAtomic.MotionBindingsV2")["Object Opacity"]
+    .presetId="MO-MRK-99"
+expect(originalControl:GetData("CartoRigAtomic.MotionBindingsV2")
+       ["Object Opacity"].presetId=="MO-MRK-01",
+       "Motion metadata tables are deep copied, never shared by reference")
+dupeMerge.animations.Blend[20]=.3
+expect(originalMerge.animations.Blend[20]==0,
+       "editing duplicated Spline cannot change the original animation")
+runtime.set_lock(copyComp,originalId,true)
+expect_failure(function()runtime.duplicate(copyComp,originalId)end,"LOCKED")
+runtime.set_lock(copyComp,originalId,false)
+
+local labelOriginal=runtime.add_label(copyComp,"Brasília",-47.88,-15.8)
+local labelDuplicate=runtime.duplicate(copyComp,labelOriginal)
+expect(labelDuplicate~=labelOriginal and
+       find(copyComp,labelDuplicate,"control").inputs.StyledText=="Brasília",
+       "Label duplicates visible text and obtains independent geoanchor")
+
+local geometryProvider={
+    get=function(_,id)
+        if id==statePolygon.id then return statePolygon end
+        return nil
+    end
+}
+local regionOriginal=runtime.add_region(copyComp,state,statePolygon)
+local regionSource=find(copyComp,regionOriginal,"control")
+regionSource:SetInput("TopLeftBlue",.33)
+local regionDuplicate=runtime.duplicate(copyComp,regionOriginal,geometryProvider)
+expect(regionDuplicate~=regionOriginal and
+       find(copyComp,regionDuplicate,"control").inputs.TopLeftBlue==.33,
+       "Region duplicates original geographic polygon and Fill override")
+expect(find(copyComp,regionDuplicate,"shape1") and
+       find(copyComp,regionDuplicate,"shape6"),
+       "Region duplicates exterior, holes and independent stroke subtools")
+
+local routeOriginal=runtime.add_route(copyComp,origin,arrival,{
+    destinationState=state,destinationGeometry=statePolygon,
+    pathType="Straight",name="Brasília to Macapá"
+})
+local routeDuplicate=runtime.duplicate(copyComp,routeOriginal,geometryProvider)
+expect(routeDuplicate~=routeOriginal and
+       find(copyComp,routeDuplicate,"control")~=nil,
+       "Route duplicate reconstructs real endpoints and native path")
+local clonedRoute=copyComp:GetData("CartoRigAtomic.SceneV2").objects[
+    #copyComp:GetData("CartoRigAtomic.SceneV2").objects].route
+expect(clonedRoute.to.sourceId==arrival.id and
+       clonedRoute.destinationStateId==state.id,
+       "Route duplicate preserves explicit arrival and state provenance")
+expect(#runtime.inspect(copyComp).objects==6,
+       "all four types duplicate without replacing other user objects")
 
 print("PASS: " .. checks .. " original Fusion graph / Control / Motion assertions")
