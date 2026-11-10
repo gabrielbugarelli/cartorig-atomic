@@ -42,6 +42,7 @@ local window = dispatcher:AddWindow({
     ui:Label{ Text = "SCENE OBJECTS" },
     ui:Combo{ ID = "Objects" },
     ui:Button{ ID = "Reveal", Text = "Reveal in Fusion Inspector" },
+    ui:Button{ ID = "Duplicate", Text = "Duplicate Selected" },
     ui:HGroup{
         ui:Button{ ID = "Rename", Text = "Rename" },
         ui:Button{ ID = "MoveUp", Text = "Move Up" },
@@ -721,6 +722,12 @@ end
 function window.On.UnlinkFollower.Clicked(_)
     handle(function(comp)
         return Runtime.unlink_follower(comp,selected_id())
+    end)
+end
+
+function window.On.Duplicate.Clicked(_)
+    handle(function(comp)
+        return Runtime.duplicate(comp,selected_id(),geometryIndex)
     end)
 end
 
