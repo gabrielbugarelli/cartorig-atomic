@@ -58,7 +58,9 @@ dispatcher = {
     RunLoop=function(self) self.loops=self.loops+1 end,
     ExitLoop=function(self)self.closed=true end,
 }
-_G.fu={UIManager=ui,CurrentComp=nil}
+local clipboardText=nil
+_G.fu={UIManager=ui,CurrentComp=nil,
+    SetClipboard=function(_,content) clipboardText=content return true end}
 _G.bmd={UIDispatcher=function(_)return dispatcher end}
 
 dofile(file)
@@ -99,6 +101,16 @@ window.On.Objects.CurrentIndexChanged({})
 window.On.Refresh.Clicked({})
 assert(widgets.State.Text:find("NO_COMP",1,true),
        "Refresh with no comp is safe and remains blocked")
+assert(type(window.On.CopyDiagnostics.Clicked)=="function",
+       "Scene provides a native Copy Diagnostics action")
+window.On.CopyDiagnostics.Clicked({})
+assert(type(clipboardText)=="string" and
+       clipboardText:find("CR-PS-2.0",1,true) and
+       clipboardText:find("NO_COMP",1,true),
+       "Diagnostics include release contract and current safe scene state")
+assert(not clipboardText:find("C:\\",1,true) and
+       not clipboardText:find(os.getenv("HOME") or "/home/_none_",1,true),
+       "Copied diagnostics must never expose a user path")
 window.On.Close.Clicked({})
 assert(dispatcher.closed,"Scene close must release native dispatch loop")
 print("PASS: packaged Fusion UIManager Scene, five tabs, events and no-comp state")
