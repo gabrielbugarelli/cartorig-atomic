@@ -179,6 +179,8 @@ local groupStages,groupComp = {},nil
 local groupChoices = {}
 local dataIssue = nil
 local selectedObjectId = nil
+local selectionStatus = "NO_SELECTION"
+local updatingScene = false
 local pendingDelete = nil
 
 local scriptLocation = debug.getinfo(1, "S").source
@@ -229,6 +231,7 @@ local function feedback(message)
 end
 
 local function sync()
+    updatingScene = true
     local current = current_comp()
     binding = nil
     choices = {}
@@ -252,6 +255,7 @@ local function sync()
         items.Composition.Text = "Composition: none"
         items.State.Text = "NO_COMP — Select a Fusion composition"
         feedback("Select a Fusion composition before editing.")
+        updatingScene = false
         return
     end
     local name = "Active Fusion composition"
@@ -264,9 +268,24 @@ local function sync()
     if not inspected then
         items.State.Text = "SCENE_ERROR — Repair before editing"
         feedback(label_error(state))
+        updatingScene = false
         return
     end
     binding = current
+    local selectedOk, hostSelection = pcall(Runtime.active_selection, current)
+    if not selectedOk then
+        selectionStatus = "SCENE_BROKEN"
+        selectedObjectId = nil
+    else
+        selectionStatus = hostSelection.state
+        if hostSelection.state == "OBJECT" then
+            selectedObjectId = hostSelection.objectId
+        elseif hostSelection.state == "NON_CARTORIG" or
+               hostSelection.state == "SYSTEM" or
+               hostSelection.state == "SCENE_BROKEN" then
+            selectedObjectId = nil
+        end
+    end
     items.DisplayMode.CurrentIndex=state.displayMode=="Transparent Overlay" and 1 or 0
     items.State.Text = "State: " .. state.state
     local groups = {}
@@ -280,7 +299,7 @@ local function sync()
     else
         items.ExistingGroups.CurrentIndex=0
     end
-    local selectIndex = 0
+    local selectIndex = -1
     for i, object in ipairs(state.objects) do
         choices[#choices+1] = object.id
         if object.kind=="Marker" then
@@ -302,16 +321,22 @@ local function sync()
     if #choices == 0 then
         selectedObjectId = nil
         items.Objects:AddItem("No authored objects")
+        items.Objects.CurrentIndex = -1
     else
         items.Objects.CurrentIndex = selectIndex
         selectedObjectId = choices[selectIndex + 1]
     end
-    if dataIssue then
+    if selectionStatus == "NON_CARTORIG" then
+        feedback("NON_CARTORIG_SELECTION: Choose an object in Scene before editing.")
+    elseif selectionStatus == "SCENE_BROKEN" then
+        feedback("SCENE_BROKEN: Refresh or recover this composition before editing.")
+    elseif dataIssue then
         feedback(dataIssue)
     else
         feedback("Scene synchronized. Offline catalog: " ..
             tostring(catalog and catalog.count or 0) .. " places.")
     end
+    updatingScene = false
 end
 
 local function require_current()
@@ -323,6 +348,10 @@ local function require_current()
 end
 
 local function selected_id()
+    if selectionStatus == "NON_CARTORIG" or
+       selectionStatus == "SCENE_BROKEN" then
+        error("NON_CARTORIG_SELECTION: Select a CartoRig object before editing.", 0)
+    end
     local index = tonumber(items.Objects.CurrentIndex) or -1
     local id = choices[index + 1]
     if not id then
@@ -341,13 +370,48 @@ local function handle(action)
         feedback(label_error(result))
         return
     end
-    if type(result) == "string" then selectedObjectId = result end
+    if type(result) == "string" then
+        local current = current_comp()
+        local valid, snapshot = pcall(Runtime.inspect, current)
+        if valid and snapshot then
+            for _, object in ipairs(snapshot.objects) do
+                if object.id == result then
+                    -- New authored object becomes the actual selected Fusion
+                    -- tool; a Group ID or a display-mode label does not.
+                    local chosen = pcall(Runtime.select, current, result)
+                    if chosen then selectedObjectId = result end
+                    break
+                end
+            end
+        end
+    end
     sync()
     if type(result) == "string" then
         feedback("Success: " .. result)
     else
         feedback("Operation completed in Fusion.")
     end
+end
+
+function window.On.Objects.CurrentIndexChanged(_)
+    if updatingScene then return end
+    local index = tonumber(items.Objects.CurrentIndex) or -1
+    local id = choices[index + 1]
+    if not id then return end
+    local current = current_comp()
+    if not current or current ~= binding then
+        feedback("WRONG_CONTEXT: Refresh the current Fusion composition.")
+        return
+    end
+    local ok, issue = pcall(Runtime.select, current, id)
+    if not ok then
+        feedback(label_error(issue))
+        return
+    end
+    selectedObjectId = id
+    selectionStatus = "OBJECT"
+    pendingDelete = nil
+    feedback("Selected in Fusion Inspector. Edit Control or Motion on the tool.")
 end
 
 function window.On.SelectBase.Clicked(_)
