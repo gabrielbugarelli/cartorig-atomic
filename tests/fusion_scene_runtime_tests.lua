@@ -139,6 +139,7 @@ local function new_comp()
         t.CR2CameraLatitude = port("CR2CameraLatitude")
         t.CR2FollowerProgress = port("CR2FollowerProgress")
         t.WriteLength = port("WriteLength")
+        t.BorderWidth = port("BorderWidth")
         t.Width = port("Width")
         t.Height = port("Height")
         t.TopLeftRed = port("TopLeftRed")
@@ -509,6 +510,15 @@ expect(regionHoleMask.inputs.PaintMode=="Subtract",
     "inner ring subtracts rather than covering a real geographic lake/hole")
 expect(regionMerge.links.Foreground==regionRender,
     "Region stroke composite is the authored visible layer")
+local regionStrokeMask=find(comp,regionId,"shape"..tostring(
+    2*#statePolygon.rings))
+expect(regionStrokeMask and regionStrokeMask.expressions.BorderWidth and
+       regionStrokeMask.expressions.BorderWidth:find("CR2_Camera.Size",1,true),
+       "Region ring strokes use shared camera inverse-zoom width")
+for _,zoomValue in ipairs({.5,1,2,10,100}) do
+    expect(math.abs((1.5/1920)/zoomValue*zoomValue-1.5/1920)<1e-12,
+           "Region geographic stroke stays at 1.5 output pixels under zoom")
+end
 expect(find(comp,regionId,"highlight_color")~=nil and
     find(comp,regionId,"stroke_composite")~=nil,
     "Region has independent optional highlight color and contour composite")
@@ -564,6 +574,13 @@ expect(routeControl.inputs.TopLeftRed==214/255,
     "native editable line defaults to neutral cartographic stroke")
 expect(find(comp,routeId,"merge").links.Foreground==routeControl,
     "Route is visible in Fusion image compositing stack")
+expect(routePath and routePath.expressions.BorderWidth and
+       routePath.expressions.BorderWidth:find("CR2_Camera.Size",1,true),
+       "Route stroke width remains camera-independent in output pixels")
+for _,zoomValue in ipairs({.5,1,2,12}) do
+    expect(math.abs((3/1920)/zoomValue*zoomValue-3/1920)<1e-12,
+           "Route path stroke remains 3 output pixels at different camera zoom")
+end
 local regionNodeCount=#comp.list
 runtime.remove(comp,regionId)
 expect(not find(comp,regionId,"control") and not find(comp,regionId,"render"),
