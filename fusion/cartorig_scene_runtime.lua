@@ -1414,7 +1414,26 @@ local function add_object(comp, kind, name, lon, lat, source)
             local c = coords(lon, lat)
             source:SetInput("StyledText", name)
             source:SetInput("Center", point(c[1], c[2]))
-            source:SetInput("Size", 0.04)
+            local formatOk,renderH=pcall(function()
+                return tonumber(comp:GetPrefs("Comp.FrameFormat.Height"))
+            end)
+            if not formatOk or not renderH or renderH~=renderH or
+               renderH<1 or renderH>32768 then
+                fail("FRAME_FORMAT",
+                    "Cannot resolve the native Fusion output height for Label")
+            end
+            -- TextPlus Size is a frame-height fraction. The default is 32
+            -- output pixels, not an arbitrary font size tied to world zoom.
+            if source:SetInput("Size",32/renderH)==false then
+                fail("HOST_LABEL","Fusion refused a pixel-normalized font size")
+            end
+            -- Neutral Dark R1.0 label text #F0F5F8; independent of base style.
+            if source:SetInput("Red1",240/255)==false or
+               source:SetInput("Green1",245/255)==false or
+               source:SetInput("Blue1",248/255)==false or
+               source:SetInput("Alpha1",1)==false then
+                fail("HOST_LABEL","Fusion refused default Label text colour")
+            end
             geoAnchor = source
         else
             fail("INVALID_OBJECT_TYPE", "Unsupported object type")
