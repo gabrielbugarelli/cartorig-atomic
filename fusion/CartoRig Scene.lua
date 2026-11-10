@@ -149,7 +149,10 @@ local window = dispatcher:AddWindow({
         },
     },
     ui:Label{ ID = "Feedback", Text = "Ready. All edits use Fusion Undo." },
-    ui:Button{ ID = "Close", Text = "Close Scene" }
+    ui:HGroup{
+        ui:Button{ ID = "CopyDiagnostics", Text = "Copy Diagnostics" },
+        ui:Button{ ID = "Close", Text = "Close Scene" }
+    }
 })
 
 if not window then
@@ -182,6 +185,7 @@ local selectedObjectId = nil
 local selectionStatus = "NO_SELECTION"
 local updatingScene = false
 local pendingDelete = nil
+local lastDiagnosticCode = "NO_ERROR"
 
 local scriptLocation = debug.getinfo(1, "S").source
 local scriptFolder = scriptLocation and
@@ -228,6 +232,8 @@ end
 
 local function feedback(message)
     items.Feedback.Text = message
+    local code = tostring(message):match("^([A-Z][A-Z_0-9]+):")
+    if code then lastDiagnosticCode = code end
 end
 
 local function sync()
@@ -822,6 +828,29 @@ function window.On.Delete.Clicked(_)
     end
     pendingDelete = nil
     handle(function(comp) return Runtime.remove(comp, id) end)
+end
+
+function window.On.CopyDiagnostics.Clicked(_)
+    -- Deliberately no comp name, project path, environment variables,
+    -- geographic search queries, filenames or arbitrary error messages.
+    local stateText = tostring(items.State.Text or "")
+    local sceneState = stateText:match("([A-Z][A-Z_]+)") or "UNKNOWN"
+    local report = table.concat({
+        "CartoRig Atomic - Fusion Scene Diagnostics",
+        "Product contract: CR-PS-2.0",
+        "Runtime: Fusion-native Scene v2",
+        "Scene state: " .. sceneState,
+        "Last status code: " .. lastDiagnosticCode,
+        "Project paths and contents: not collected",
+    }, "\n")
+    local ok, copied = pcall(function()
+        return fusionApp:SetClipboard(report)
+    end)
+    if not ok or copied == false then
+        feedback("CLIPBOARD_UNAVAILABLE: Copy from the Fusion Console instead.")
+        return
+    end
+    feedback("Diagnostics copied without project or personal information.")
 end
 
 function window.On.Close.Clicked(_)
