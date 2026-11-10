@@ -1501,6 +1501,18 @@ local function host_polyline(vertices, closed)
     return result
 end
 
+local function preserve_stroke_pixels(mask,camera,baseWidth)
+    if not mask.BorderWidth then
+        fail("HOST_STROKE","Fusion vector mask has no stroke width input")
+    end
+    local cameraName=fusion_expression_name(camera,"shared Camera stroke scale")
+    local formula=string.format("%.12f/(%s.Size)",baseWidth,cameraName)
+    if mask.BorderWidth:SetExpression(formula)==false then
+        fail("HOST_STROKE",
+            "Fusion cannot keep this geographic stroke constant in output pixels")
+    end
+end
+
 local function make_mask(comp, scene, objectId, index, ring, closed, width, paint)
     local mask=add_tool(comp,"PolylineMask","CR2_Path_" .. index,
         -7,index*2,scene.sceneId,objectId,"shape"..index)
@@ -1584,6 +1596,7 @@ function M.add_region(comp, feature, geometry)
                stroke:SetInput("WriteLength",1)==false then
                 fail("HOST_MASK","Region stroke width/progress is unavailable")
             end
+            preserve_stroke_pixels(stroke,camera,1.5/1920)
             local length=0
             for p=1,#ring.vertices do
                 local a=ring.vertices[p]
@@ -1828,7 +1841,7 @@ function M.add_route(comp,origin,arrival,details)
     local name=safe_name(details.name or
         ((origin.name or "Origin").." → "..(arrival.name or "Destination")))
     local scene=require_scene(comp)
-    validate_graph(comp,scene)
+    local _,camera=validate_graph(comp,scene)
     return undo(comp,"CartoRig: Add Route",function()
         local id=next_id(scene)
         local n=#scene.objects+1
@@ -1844,6 +1857,7 @@ function M.add_route(comp,origin,arrival,details)
         for i,segment in ipairs(segments) do
             local role="shape"..tostring(n*100+i)
             local mask=make_mask(comp,scene,id,n*100+i,segment,false,3/1920,"Add")
+            preserve_stroke_pixels(mask,camera,3/1920)
             if mask:SetInput("WriteLength",1)==false then
                 fail("HOST_MASK","Route mask has no native Write Length control")
             end
