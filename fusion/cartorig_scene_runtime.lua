@@ -2145,6 +2145,36 @@ function M.ungroup(comp, groupId)
     end)
 end
 
+-- Read the host Node Editor's current selection without mutating the
+-- composition. The stable scene/object identity is authoritative; tool names
+-- may have been edited by the user and are not sufficient for binding.
+function M.active_selection(comp)
+    local scene = get_scene(comp)
+    if not scene then return {state="NO_SCENE"} end
+    validate_graph(comp,scene)
+    local ok, tool = pcall(function() return comp.ActiveTool end)
+    if not ok or tool==nil then
+        return {state="NO_SELECTION"}
+    end
+    local taggedOk, identity = pcall(function() return tool:GetData(TOOL_KEY) end)
+    if not taggedOk or type(identity)~="table" or
+       identity.sceneId~=scene.sceneId then
+        return {state="NON_CARTORIG"}
+    end
+    if identity.role=="base" and identity.objectId==scene.sceneId then
+        return {state="SYSTEM",role="base"}
+    end
+    if identity.role=="camera" and identity.objectId==scene.cameraId then
+        return {state="SYSTEM",role="camera"}
+    end
+    for _,object in ipairs(scene.objects) do
+        if object.id==identity.objectId then
+            return {state="OBJECT",objectId=object.id}
+        end
+    end
+    return {state="SCENE_BROKEN",objectId=identity.objectId}
+end
+
 function M.select(comp, objectId)
     local scene = require_scene(comp)
     validate_graph(comp, scene)
