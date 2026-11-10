@@ -1201,6 +1201,20 @@ expect(regionDuplicate~=regionOriginal and
 expect(find(copyComp,regionDuplicate,"shape1") and
        find(copyComp,regionDuplicate,"shape6"),
        "Region duplicates exterior, holes and independent stroke subtools")
+local originalBorder=find(copyComp,regionOriginal,"shape6")
+local copiedBorder=find(copyComp,regionDuplicate,"shape6")
+expect(originalBorder.expressions.BorderWidth==
+       copiedBorder.expressions.BorderWidth,
+       "Region duplicate keeps the same generated 1.5px camera compensation")
+expect(originalBorder~=copiedBorder,
+       "Region duplicate owns a distinct vector stroke native Fusion tool")
+local unsupportedId=runtime.add_marker(copyComp,"Custom Expression",0,0)
+local unsupportedMask=find(copyComp,unsupportedId,"mask")
+unsupportedMask.Width:SetExpression("OutsideTool.Size")
+expect_failure(function()runtime.duplicate(copyComp,unsupportedId)end,
+       "DUPLICATE_EXPRESSION")
+expect(runtime.inspect(copyComp).objects[#runtime.inspect(copyComp).objects].id==
+       unsupportedId,"unsupported expression cannot create a half-cloned object")
 
 local routeOriginal=runtime.add_route(copyComp,origin,arrival,{
     destinationState=state,destinationGeometry=statePolygon,
@@ -1215,8 +1229,8 @@ local clonedRoute=copyComp:GetData("CartoRigAtomic.SceneV2").objects[
 expect(clonedRoute.to.sourceId==arrival.id and
        clonedRoute.destinationStateId==state.id,
        "Route duplicate preserves explicit arrival and state provenance")
-expect(#runtime.inspect(copyComp).objects==8,
-       "four originals and four clones remain independent Scene objects")
+expect(#runtime.inspect(copyComp).objects==9,
+       "four originals, four clones and rejected-expression original remain independent")
 
 
 -- Output-pixel stroke geometry is tied to the composition's actual size.
