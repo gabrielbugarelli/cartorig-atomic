@@ -65,6 +65,8 @@ jobs:
         run: |
           luac5.1 -p "dist/CartoRig Scene.lua"
           luac5.4 -p "dist/CartoRig Scene.lua"
+          lua5.1 tests/fusion_scene_ui_runtime_tests.lua "dist/CartoRig Scene.lua"
+          lua5.4 tests/fusion_scene_ui_runtime_tests.lua "dist/CartoRig Scene.lua"
       - name: Run packaging regression tests
         run: python -m unittest discover -s tests -p test_fusion_package.py -v
       - name: Check compact Scene UI layout and existing action bindings
