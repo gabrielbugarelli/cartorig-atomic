@@ -22,7 +22,7 @@ end
 local window = dispatcher:AddWindow({
     ID = "CartoRigAtomicFusionScene",
     WindowTitle = "CartoRig — Scene",
-    Geometry = { 150, 130, 480, 630 },
+    Geometry = { 150, 130, 560, 680 },
     Spacing = 9
 }, ui:VGroup{
     ID = "Root",
@@ -34,47 +34,11 @@ local window = dispatcher:AddWindow({
         ui:Button{ ID = "Refresh", Text = "Refresh" },
         ui:Button{ ID = "Create", Text = "Create Scene" }
     },
-    ui:HGroup{
-        ui:Button{ ID = "SelectBase", Text = "Base Map Control" },
-        ui:Button{ ID = "SelectCamera", Text = "Camera Control" }
-    },
-    ui:HGroup{
-        ui:Combo{ ID = "DisplayMode" },
-        ui:Button{ ID = "SetMode", Text = "Set Display Mode" }
-    },
-    ui:Label{ Text = "FIND OFFLINE LOCATION" },
-    ui:HGroup{
-        ui:LineEdit{ ID = "Search", Text = "" },
-        ui:Button{ ID = "SearchButton", Text = "Search" }
-    },
-    ui:Combo{ ID = "LocationFilter" },
-    ui:Combo{ ID = "SearchResults" },
-    ui:Label{ ID = "LocationDetail", Text = "Enter a location name to search the installed index." },
-    ui:HGroup{
-        ui:Button{ ID = "AddFoundRegion", Text = "Add Region" },
-        ui:Button{ ID = "AddFoundMarker", Text = "Add Marker" },
-        ui:Button{ ID = "AddFoundLabel", Text = "Add Label" },
-        ui:Button{ ID = "FocusFound", Text = "Focus" }
-    },
-    ui:Button{ ID = "SetFlyTarget", Text = "Use Selected City as Fly To Target" },
-    ui:Label{ Text = "CAMERA FIT — EXPLICIT TARGET SELECTION" },
-    ui:HGroup{
-        ui:Button{ ID = "AddFitSelection", Text = "Add Selected Place" },
-        ui:Button{ ID = "ClearFitSelection", Text = "Clear" },
-        ui:Button{ ID = "SetFitTarget", Text = "Set Fit Target" }
-    },
-    ui:Label{ ID = "FitSelectionLabel", Text = "Fit selection: none" },
-    ui:Label{ Text = "CREATE ROUTE FROM SELECTED LOCATIONS" },
-    ui:HGroup{
-        ui:Button{ ID = "UseRouteFrom", Text = "Set Start" },
-        ui:Button{ ID = "UseRouteState", Text = "Set State" },
-        ui:Button{ ID = "UseRouteArrival", Text = "Set Arrival" }
-    },
-    ui:Label{ ID = "RouteSelection", Text = "Start: —    State: —    Arrival: —" },
-    ui:HGroup{
-        ui:Combo{ ID = "RouteStyle" },
-        ui:Button{ ID = "CreateRoute", Text = "Add Route" }
-    },
+    ui:TabBar{ ID = "SceneTabs", Weight = 0.0, Expanding = true },
+    ui:Stack{
+        ID = "ScenePages", Weight = 1.0,
+        ui:VGroup{
+            ID = "ScenePageObjects", Spacing = 8,
     ui:Label{ Text = "SCENE OBJECTS" },
     ui:Combo{ ID = "Objects" },
     ui:Button{ ID = "Reveal", Text = "Reveal in Fusion Inspector" },
@@ -90,20 +54,22 @@ local window = dispatcher:AddWindow({
         ui:Button{ ID = "Unlock", Text = "Unlock" }
     },
     ui:Button{ ID = "Delete", Text = "Delete Selected (Confirm)" },
-    ui:Label{ Text = "ORGANIZE OBJECTS INTO GROUPS" },
+        },
+        ui:VGroup{
+            ID = "ScenePageFind", Spacing = 8,
+    ui:Label{ Text = "FIND OFFLINE LOCATION" },
     ui:HGroup{
-        ui:Button{ ID = "StageGroup", Text = "+ Add Selected Object" },
-        ui:Button{ ID = "ClearGroupStage", Text = "Clear Selection" },
-        ui:Button{ ID = "Group", Text = "Create Group" }
+        ui:LineEdit{ ID = "Search", Text = "" },
+        ui:Button{ ID = "SearchButton", Text = "Search" }
     },
-    ui:Label{ ID = "GroupSelectionLabel", Text = "Group selection: none" },
-    ui:Combo{ ID = "ExistingGroups" },
-    ui:Button{ ID = "Ungroup", Text = "Ungroup Chosen Group" },
-    ui:Label{ Text = "ROUTE FOLLOWER — SELECT EXISTING MARKER" },
-    ui:Combo{ ID = "FollowerMarker" },
+    ui:Combo{ ID = "LocationFilter" },
+    ui:Combo{ ID = "SearchResults" },
+    ui:Label{ ID = "LocationDetail", Text = "Enter a location name to search the installed index." },
     ui:HGroup{
-        ui:Button{ ID = "LinkFollower", Text = "Link to Selected Route" },
-        ui:Button{ ID = "UnlinkFollower", Text = "Unlink Follower" }
+        ui:Button{ ID = "AddFoundRegion", Text = "Add Region" },
+        ui:Button{ ID = "AddFoundMarker", Text = "Add Marker" },
+        ui:Button{ ID = "AddFoundLabel", Text = "Add Label" },
+        ui:Button{ ID = "FocusFound", Text = "Focus" }
     },
     ui:Label{ Text = "ADD GEOANCHORED OBJECT" },
     ui:Label{ Text = "Name" },
@@ -122,12 +88,65 @@ local window = dispatcher:AddWindow({
         ui:Button{ ID = "Marker", Text = "Add Marker" },
         ui:Button{ ID = "Label", Text = "Add Label" }
     },
+        },
+        ui:VGroup{
+            ID = "ScenePageRoutes", Spacing = 8,
+    ui:Label{ Text = "CREATE ROUTE FROM SELECTED LOCATIONS" },
+    ui:HGroup{
+        ui:Button{ ID = "UseRouteFrom", Text = "Set Start" },
+        ui:Button{ ID = "UseRouteState", Text = "Set State" },
+        ui:Button{ ID = "UseRouteArrival", Text = "Set Arrival" }
+    },
+    ui:Label{ ID = "RouteSelection", Text = "Start: —    State: —    Arrival: —" },
+    ui:HGroup{
+        ui:Combo{ ID = "RouteStyle" },
+        ui:Button{ ID = "CreateRoute", Text = "Add Route" }
+    },
+    ui:Label{ Text = "ROUTE FOLLOWER — SELECT EXISTING MARKER" },
+    ui:Combo{ ID = "FollowerMarker" },
+    ui:HGroup{
+        ui:Button{ ID = "LinkFollower", Text = "Link to Selected Route" },
+        ui:Button{ ID = "UnlinkFollower", Text = "Unlink Follower" }
+    },
+        },
+        ui:VGroup{
+            ID = "ScenePageCamera", Spacing = 8,
+    ui:HGroup{
+        ui:Button{ ID = "SelectBase", Text = "Base Map Control" },
+        ui:Button{ ID = "SelectCamera", Text = "Camera Control" }
+    },
+    ui:HGroup{
+        ui:Combo{ ID = "DisplayMode" },
+        ui:Button{ ID = "SetMode", Text = "Set Display Mode" }
+    },
+    ui:Button{ ID = "SetFlyTarget", Text = "Use Selected City as Fly To Target" },
+    ui:Label{ Text = "CAMERA FIT — EXPLICIT TARGET SELECTION" },
+    ui:HGroup{
+        ui:Button{ ID = "AddFitSelection", Text = "Add Selected Place" },
+        ui:Button{ ID = "ClearFitSelection", Text = "Clear" },
+        ui:Button{ ID = "SetFitTarget", Text = "Set Fit Target" }
+    },
+    ui:Label{ ID = "FitSelectionLabel", Text = "Fit selection: none" },
     ui:Label{ Text = "SHARED CAMERA" },
     ui:HGroup{
         ui:Label{ Text = "Zoom" },
         ui:LineEdit{ ID = "Zoom", Text = "1" },
         ui:Button{ ID = "Focus", Text = "Focus Point" },
         ui:Button{ ID = "SetZoom", Text = "Set Zoom" }
+    },
+        },
+        ui:VGroup{
+            ID = "ScenePageGroups", Spacing = 8,
+    ui:Label{ Text = "ORGANIZE OBJECTS INTO GROUPS" },
+    ui:HGroup{
+        ui:Button{ ID = "StageGroup", Text = "+ Add Selected Object" },
+        ui:Button{ ID = "ClearGroupStage", Text = "Clear Selection" },
+        ui:Button{ ID = "Group", Text = "Create Group" }
+    },
+    ui:Label{ ID = "GroupSelectionLabel", Text = "Group selection: none" },
+    ui:Combo{ ID = "ExistingGroups" },
+    ui:Button{ ID = "Ungroup", Text = "Ungroup Chosen Group" },
+        },
     },
     ui:Label{ ID = "Feedback", Text = "Ready. All edits use Fusion Undo." },
     ui:Button{ ID = "Close", Text = "Close Scene" }
@@ -139,6 +158,15 @@ if not window then
 end
 
 local items = window:GetItems()
+items.ScenePages.CurrentIndex = 0
+function window.On.SceneTabs.CurrentChanged(ev)
+    local index = tonumber(ev.Index) or 0
+    if index >= 0 and index < 5 then items.ScenePages.CurrentIndex = index end
+end
+for _, label in ipairs({ "Objects", "Find", "Routes", "Camera", "Groups" }) do
+    items.SceneTabs:AddTab(label)
+end
+items.SceneTabs.CurrentIndex = 0
 local binding = nil
 local choices = {}
 local followerChoices = {}
