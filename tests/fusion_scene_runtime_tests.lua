@@ -133,6 +133,7 @@ local function new_comp()
         t.Blend = port("Blend")
         t.Size = port("Size")
         t.Center = port("Center")
+        t.Pivot = port("Pivot")
         t.StyledText = port("StyledText")
         t.CR2CameraLongitude = port("CR2CameraLongitude")
         t.CR2CameraLatitude = port("CR2CameraLatitude")
@@ -223,6 +224,21 @@ local merge1 = find(comp, marker1, "merge")
 local mask1 = find(comp, marker1, "mask")
 expect(control1 ~= nil and mask1 ~= nil and merge1 ~= nil,
        "Marker has real Fusion Background, EllipseMask and Merge")
+local markerScale=find(comp,marker1,"screenScale")
+expect(markerScale and markerScale.ID=="Transform",
+       "Marker has a real inverse-zoom Transform inside its own Fusion branch")
+expect(markerScale.links.Input==control1 and
+       merge1.links.Foreground==markerScale,
+       "Marker inverse zoom is applied before shared geographic Camera")
+expect(markerScale.expressions.Size:find("CR2_Camera.Size",1,true),
+       "Marker visual size is inversely tied to shared Camera zoom")
+expect(markerScale.expressions.Center:find("CR2_Mask_1.Center",1,true) and
+       markerScale.expressions.Pivot:find("CR2_Mask_1.Center",1,true),
+       "Inverse zoom stays around the actual geographic mask anchor")
+for _, zoomValue in ipairs({.5,1,2,8,100}) do
+    expect(math.abs((14/1920)*(1/zoomValue)*zoomValue-14/1920)<1e-12,
+           "Marker inverse zoom preserves a constant 14-pixel width mathematically")
+end
 expect(control1.UserControls.CR2MotionApply.ICS_ControlPage=="Motion",
        "Marker exposes native Inspector Motion without using Scene controls")
 expect(control1.UserControls.CR2MotionApply.BTNCS_Execute:find("MO-MRK-01",1,true),
@@ -254,6 +270,14 @@ expect(marker1 ~= marker2, "independent stable object IDs")
 local label = runtime.add_label(comp, "São Paulo", -46.6333, -23.5505)
 local labelControl = find(comp, label, "control")
 expect(labelControl.ID == "TextPlus", "Label uses native Fusion TextPlus")
+local labelScale=find(comp,label,"screenScale")
+expect(labelScale and labelScale.ID=="Transform" and
+       labelScale.links.Input==labelControl and
+       find(comp,label,"merge").links.Foreground==labelScale,
+       "Label has a separate inverse-zoom node before the common Camera")
+expect(labelScale.expressions.Size:find("CR2_Camera.Size",1,true) and
+       labelScale.expressions.Pivot:find("CR2_Label_3.Center",1,true),
+       "Label inverse zoom keeps text fixed in screen pixels about text geoanchor")
 expect(labelControl.UserControls.CR2MotionApply.ICS_ControlPage=="Motion",
        "Label has native Motion page on its selected TextPlus tool")
 expect(labelControl.inputs.StyledText == "São Paulo", "Unicode label preserved")
@@ -381,8 +405,8 @@ local priorCount = #comp:GetToolList()
 runtime.remove(comp, marker2)
 expect(#runtime.inspect(comp).objects == 2,
        "deletion removes only selected cartographic object")
-expect(#comp:GetToolList() == priorCount - 3,
-       "deletion removes marker control, mask and Merge")
+expect(#comp:GetToolList() == priorCount - 4,
+       "deletion removes marker control, mask, inverse zoom and Merge")
 expect(find(comp, marker2, "control") == nil,
        "deleted object no longer has managed Fusion Control")
 expect(#comp.undo > 7, "each operation is a native host Undo transaction")
@@ -1026,6 +1050,9 @@ expect(runtime.link_follower(comp,routeId,marker1)==true,
        "Link follower chooses existing authored Marker explicitly")
 expect(mask1.expressions.Center:find("CR2FollowerProgress",1,true)~=nil,
        "Marker Center reacts to the Route's native Follower Progress")
+expect(markerScale.expressions.Center:find("CR2_Mask_1.Center",1,true) and
+       markerScale.expressions.Pivot:find("CR2_Mask_1.Center",1,true),
+       "route follower moves the constant-pixel Marker together with its anchor")
 expect(mask1:GetData("CartoRigAtomic.FollowerLinkV2").routeId==routeId,
        "Follower preserves the original anchor and its source Route ID")
 expect(followRoute:GetData("CartoRigAtomic.RouteFollowerV2").markerId==marker1,
@@ -1098,6 +1125,12 @@ expect(#copyComp.undo==beforeCopyUndo+1 and
        copyComp.undo[#copyComp.undo].label=="CartoRig: Duplicate Object",
        "cloning all subtools and their curves is ONE Fusion Undo step")
 local dupeCtrl=find(copyComp,duplicatedId,"control")
+local duplicatedScale=find(copyComp,duplicatedId,"screenScale")
+expect(duplicatedScale and duplicatedScale.ID=="Transform" and
+       duplicatedScale.expressions.Size:find("CR2_Camera.Size",1,true),
+       "Duplicated Marker recreates independent screen-size compensation")
+expect(duplicatedScale~=find(copyComp,originalId,"screenScale"),
+       "cloned screen-size compensation does not reuse the source node")
 local dupeMask=find(copyComp,duplicatedId,"mask")
 local dupeMerge=find(copyComp,duplicatedId,"merge")
 expect(dupeCtrl.inputs.TopLeftRed==.125,
