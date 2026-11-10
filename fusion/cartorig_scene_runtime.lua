@@ -1570,7 +1570,7 @@ function M.add_region(comp, feature, geometry)
     end
     local name=safe_name(feature.name)
     local scene=require_scene(comp)
-    validate_graph(comp,scene)
+    local _,camera=validate_graph(comp,scene)
     return undo(comp,"CartoRig: Add Region",function()
         local id=next_id(scene)
         local n=#scene.objects+1
