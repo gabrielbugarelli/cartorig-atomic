@@ -1179,6 +1179,7 @@ end
 
 local function visible_source(comp, scene, object)
     return object_tool(comp, scene, object.id, "render")
+        or object_tool(comp, scene, object.id, "screenScale")
         or object_tool(comp, scene, object.id, "control")
 end
 
@@ -1332,6 +1333,38 @@ local function source_ref(source)
     }
 end
 
+local function fusion_expression_name(tool,context)
+    local ok,attrs=pcall(function()return tool:GetAttrs()end)
+    local name=ok and type(attrs)=="table" and attrs.TOOLS_Name or nil
+    if type(name)~="string" or not name:match("^[%a_][%w_]*$") then
+        fail("HOST_EXPRESSION","Cannot resolve safe Fusion tool name for "..context)
+    end
+    return name
+end
+
+-- Keep icon/text pixel footprint invariant under the shared geographic
+-- camera. This inverse transform happens BEFORE the camera, around the
+-- current authored anchor, so its position still follows pan/zoom.
+-- Center and Pivot follow native host channels including Route followers.
+local function add_screen_scale(comp,scene,id,n,source,anchor,camera,lon,lat)
+    local scaler=add_tool(comp,"Transform","CR2_ScreenScale_"..n,
+        1,n*2,scene.sceneId,id,"screenScale")
+    local pos=coords(lon,lat)
+    scaler:SetInput("Center",point(pos[1],pos[2]))
+    scaler:SetInput("Pivot",point(pos[1],pos[2]))
+    checked_link(scaler,"Input",source)
+    local cameraName=fusion_expression_name(camera,"Camera Size")
+    local anchorName=fusion_expression_name(anchor,"GeoAnchor Center")
+    if not scaler.Size or not scaler.Center or not scaler.Pivot or
+       scaler.Size:SetExpression("1/("..cameraName..".Size)")==false or
+       scaler.Center:SetExpression(anchorName..".Center")==false or
+       scaler.Pivot:SetExpression(anchorName..".Center")==false then
+        fail("HOST_SCREEN_SCALE",
+            "Fusion cannot preserve symbol pixel size under Camera zoom")
+    end
+    return scaler
+end
+
 local function add_object(comp, kind, name, lon, lat, source)
     name = safe_name(name)
     lon, lat = validate_position(lon, lat)
@@ -1347,6 +1380,7 @@ local function add_object(comp, kind, name, lon, lat, source)
         local id = next_id(scene)
         local n = #scene.objects + 1
         local source
+        local geoAnchor
         if kind == "Marker" then
             source = add_tool(comp, "Background", "CR2_Marker_" .. n,
                 -4, n * 2, scene.sceneId, id, "control")
@@ -1373,6 +1407,7 @@ local function add_object(comp, kind, name, lon, lat, source)
             mask:SetInput("Width", 14/renderW)
             mask:SetInput("Height", 14/renderH)
             checked_link(source, "EffectMask", mask)
+            geoAnchor = mask
         elseif kind == "Label" then
             source = add_tool(comp, "TextPlus", "CR2_Label_" .. n,
                 -4, n * 2, scene.sceneId, id, "control")
@@ -1380,16 +1415,19 @@ local function add_object(comp, kind, name, lon, lat, source)
             source:SetInput("StyledText", name)
             source:SetInput("Center", point(c[1], c[2]))
             source:SetInput("Size", 0.04)
+            geoAnchor = source
         else
             fail("INVALID_OBJECT_TYPE", "Unsupported object type")
         end
 
         attach_inspector_motion(source, kind)
+        local screenScale=add_screen_scale(comp,scene,id,n,
+            source,geoAnchor,camera,lon,lat)
 
         local merge = add_tool(comp, "Merge", "CR2_Merge_" .. n,
             2, n * 2, scene.sceneId, id, "merge")
         checked_link(merge, "Background", tail)
-        checked_link(merge, "Foreground", source)
+        checked_link(merge, "Foreground", screenScale)
         checked_link(camera, "Input", merge)
 
         scene.tailId = id
