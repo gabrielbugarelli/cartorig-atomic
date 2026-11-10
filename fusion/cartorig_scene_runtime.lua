@@ -1110,12 +1110,22 @@ local function checked_link(tool, input, upstream)
     end
 end
 
+local activeUndos = setmetatable({}, {__mode="k"})
 local function undo(comp, label, operation)
-    -- Each user's action should be a single native Undo item.
-    comp:StartUndo(label)
+    -- A composite authoring action (e.g. Duplicate) must remain ONE Fusion
+    -- Undo step even when it invokes an existing object factory internally.
+    if activeUndos[comp] then return operation() end
+    activeUndos[comp]=true
+    local started, startErr = pcall(function() comp:StartUndo(label) end)
+    if not started then
+        activeUndos[comp]=nil
+        error(startErr,0)
+    end
     local ok, result = xpcall(operation, debug.traceback)
-    comp:EndUndo(ok)
-    if not ok then error(result, 0) end
+    local closed, closeErr = pcall(function() comp:EndUndo(ok) end)
+    activeUndos[comp]=nil
+    if not ok then error(result,0) end
+    if not closed then error(closeErr,0) end
     return result
 end
 
