@@ -33,7 +33,10 @@ local function new_comp()
         if key=="Comp.FrameFormat.Height" then return 1080 end
         return nil
     end
-    function comp:SetActiveTool(tool) self.active = tool end
+    function comp:SetActiveTool(tool)
+        self.active = tool
+        self.ActiveTool = tool
+    end
     function comp:StartUndo(label)
         expect(self.openUndo == nil, "Undo cannot be nested")
         self.openUndo = label
@@ -254,6 +257,19 @@ control1:SetAttrs({ TOOLS_Name = "Renamed by user" })
 expect(runtime.select(comp, marker1) == control1,
        "select object by stable metadata after manual tool rename")
 expect(comp.active == control1, "native Fusion tool becomes Inspector selection")
+expect(runtime.active_selection(comp).state=="OBJECT" and
+       runtime.active_selection(comp).objectId==marker1,
+       "active native Fusion Control resolves to stable CartoRig object ID")
+local foreignTool=comp:AddTool("BrightnessContrast",false,13,7)
+comp:SetActiveTool(foreignTool)
+expect(runtime.active_selection(comp).state=="NON_CARTORIG",
+       "foreign Fusion selection must never be confused with CartoRig object")
+runtime.select_system(comp,"camera")
+expect(runtime.active_selection(comp).state=="SYSTEM" and
+       runtime.active_selection(comp).role=="camera",
+       "native shared Camera selection remains distinct from authored object")
+runtime.select(comp,marker1)
+
 
 -- Same camera applied to every geoanchored layer, all keys in native host.
 runtime.focus(comp, -46.6333, -23.5505, 2)
