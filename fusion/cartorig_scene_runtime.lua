@@ -1501,6 +1501,17 @@ local function host_polyline(vertices, closed)
     return result
 end
 
+local function output_pixel_width(comp)
+    local ok,width=pcall(function()
+        return tonumber(comp:GetPrefs("Comp.FrameFormat.Width"))
+    end)
+    if not ok or not width or width~=width or
+        width<1 or width>32768 then
+        fail("FRAME_FORMAT","Cannot measure Fusion output width in pixels")
+    end
+    return width
+end
+
 local function preserve_stroke_pixels(mask,camera,baseWidth)
     if not mask.BorderWidth then
         fail("HOST_STROKE","Fusion vector mask has no stroke width input")
@@ -1569,6 +1580,7 @@ function M.add_region(comp, feature, geometry)
         fail("GEOMETRY_SIZE","Region exceeds managed Fusion polygon limit")
     end
     local name=safe_name(feature.name)
+    local renderW=output_pixel_width(comp)
     local scene=require_scene(comp)
     local _,camera=validate_graph(comp,scene)
     return undo(comp,"CartoRig: Add Region",function()
@@ -1590,13 +1602,13 @@ function M.add_region(comp, feature, geometry)
             if previousMask then checked_link(mask,"EffectMask",previousMask) end
             previousMask=mask
             local stroke=make_mask(comp,scene,id,#geometry.rings+i,
-                ring.vertices,true,1.5/1920,"Add")
+                ring.vertices,true,1.5/renderW,"Add")
             if stroke:SetInput("Solid",0)==false or
-               stroke:SetInput("BorderWidth",1.5/1920)==false or
+               stroke:SetInput("BorderWidth",1.5/renderW)==false or
                stroke:SetInput("WriteLength",1)==false then
                 fail("HOST_MASK","Region stroke width/progress is unavailable")
             end
-            preserve_stroke_pixels(stroke,camera,1.5/1920)
+            preserve_stroke_pixels(stroke,camera,1.5/renderW)
             local length=0
             for p=1,#ring.vertices do
                 local a=ring.vertices[p]
@@ -1840,6 +1852,7 @@ function M.add_route(comp,origin,arrival,details)
         {lon=ox,lat=oy},{lon=tx,lat=ty},style,details.curvature)
     local name=safe_name(details.name or
         ((origin.name or "Origin").." → "..(arrival.name or "Destination")))
+    local renderW=output_pixel_width(comp)
     local scene=require_scene(comp)
     local _,camera=validate_graph(comp,scene)
     return undo(comp,"CartoRig: Add Route",function()
@@ -1856,8 +1869,8 @@ function M.add_route(comp,origin,arrival,details)
         local lengths={}
         for i,segment in ipairs(segments) do
             local role="shape"..tostring(n*100+i)
-            local mask=make_mask(comp,scene,id,n*100+i,segment,false,3/1920,"Add")
-            preserve_stroke_pixels(mask,camera,3/1920)
+            local mask=make_mask(comp,scene,id,n*100+i,segment,false,3/renderW,"Add")
+            preserve_stroke_pixels(mask,camera,3/renderW)
             if mask:SetInput("WriteLength",1)==false then
                 fail("HOST_MASK","Route mask has no native Write Length control")
             end
