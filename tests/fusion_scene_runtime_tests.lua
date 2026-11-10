@@ -1164,7 +1164,7 @@ local clonedRoute=copyComp:GetData("CartoRigAtomic.SceneV2").objects[
 expect(clonedRoute.to.sourceId==arrival.id and
        clonedRoute.destinationStateId==state.id,
        "Route duplicate preserves explicit arrival and state provenance")
-expect(#runtime.inspect(copyComp).objects==6,
-       "all four types duplicate without replacing other user objects")
+expect(#runtime.inspect(copyComp).objects==8,
+       "four originals and four clones remain independent Scene objects")
 
 print("PASS: " .. checks .. " original Fusion graph / Control / Motion assertions")
