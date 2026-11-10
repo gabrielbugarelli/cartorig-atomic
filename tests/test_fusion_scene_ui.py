@@ -13,7 +13,7 @@ SCRIPT = ROOT / "fusion/CartoRig Scene.lua"
 
 PAGES = ("Objects", "Find", "Routes", "Camera", "Groups")
 PAGE_IDS = {
-    "Objects": ("Objects", "Reveal", "Rename", "MoveUp", "MoveDown",
+    "Objects": ("Objects", "Reveal", "Duplicate", "Rename", "MoveUp", "MoveDown",
                 "Show", "Hide", "Lock", "Unlock", "Delete"),
     "Find": ("Search", "SearchResults", "LocationFilter", "AddFoundRegion",
              "AddFoundMarker", "AddFoundLabel", "Marker", "Label"),
@@ -84,6 +84,11 @@ class FusionSceneNavigationTests(unittest.TestCase):
         self.assertIn('updatingScene = false', self.code)
         self.assertIn('if updatingScene then return end', self.code)
         self.assertIn('NON_CARTORIG_SELECTION:', self.code)
+
+    def test_duplicate_is_explicit_and_uses_real_offline_geometry(self):
+        self.assertIn('ID = "Duplicate"', self.ui)
+        self.assertIn('function window.On.Duplicate.Clicked(_)', self.code)
+        self.assertIn('Runtime.duplicate(comp,selected_id(),geometryIndex)', self.code)
 
     def test_new_objects_reveal_in_fusion_without_selecting_group_as_tool(self):
         self.assertIn('if object.id == result then', self.code)
