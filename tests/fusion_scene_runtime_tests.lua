@@ -147,6 +147,10 @@ local function new_comp(formatWidth,formatHeight)
         t.TopLeftGreen = port("TopLeftGreen")
         t.TopLeftBlue = port("TopLeftBlue")
         t.TopLeftAlpha = port("TopLeftAlpha")
+        t.Red1 = port("Red1")
+        t.Green1 = port("Green1")
+        t.Blue1 = port("Blue1")
+        t.Alpha1 = port("Alpha1")
         t.Background = port("Background")
         t.Foreground = port("Foreground")
         t.EffectMask = port("EffectMask")
@@ -283,6 +287,12 @@ expect(labelScale.expressions.Size:find("CR2_Camera.Size",1,true) and
 expect(labelControl.UserControls.CR2MotionApply.ICS_ControlPage=="Motion",
        "Label has native Motion page on its selected TextPlus tool")
 expect(labelControl.inputs.StyledText == "São Paulo", "Unicode label preserved")
+expect(math.abs(labelControl.inputs.Size-32/1080)<1e-12,
+       "TextPlus renders the proposed 32px font at 1080p")
+expect(labelControl.inputs.Red1==240/255 and
+       labelControl.inputs.Green1==245/255 and
+       labelControl.inputs.Blue1==248/255 and labelControl.inputs.Alpha1==1,
+       "Label text color defaults to neutral #F0F5F8 with independent alpha")
 expect(#runtime.inspect(comp).objects == 3, "Scene tree reconstructs from comp state")
 
 -- Tool names must never be the canonical object identity.
@@ -1180,10 +1190,13 @@ expect_failure(function()runtime.duplicate(copyComp,originalId)end,"LOCKED")
 runtime.set_lock(copyComp,originalId,false)
 
 local labelOriginal=runtime.add_label(copyComp,"Brasília",-47.88,-15.8)
+find(copyComp,labelOriginal,"control"):SetInput("Red1",.2)
 local labelDuplicate=runtime.duplicate(copyComp,labelOriginal)
 expect(labelDuplicate~=labelOriginal and
        find(copyComp,labelDuplicate,"control").inputs.StyledText=="Brasília",
        "Label duplicates visible text and obtains independent geoanchor")
+expect(find(copyComp,labelDuplicate,"control").inputs.Red1==.2,
+       "Label duplication preserves custom native text color independently")
 
 local geometryProvider={
     get=function(_,id)
@@ -1235,6 +1248,12 @@ expect(#runtime.inspect(copyComp).objects==9,
 
 -- Output-pixel stroke geometry is tied to the composition's actual size.
 local resolutionComp=new_comp(3840,2160)
+local wideLabelComp=new_comp(3840,2160)
+wideLabelComp:AddTool("MediaOut")
+runtime.create(wideLabelComp)
+local wideLabel=runtime.add_label(wideLabelComp,"4K Label",0,0)
+expect(math.abs(find(wideLabelComp,wideLabel,"control").inputs.Size-32/2160)<1e-12,
+       "4K TextPlus keeps the same 32px output font size")
 resolutionComp:AddTool("MediaOut")
 runtime.create(resolutionComp)
 local wideRegion=runtime.add_region(resolutionComp,state,statePolygon)
