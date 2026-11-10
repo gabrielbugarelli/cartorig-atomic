@@ -15,8 +15,9 @@ local function expect_failure(action, code)
         "expected " .. code .. " error, saw " .. tostring(reason))
 end
 
-local function new_comp()
-    local comp = { list = {}, state = {}, undo = {}, active = nil }
+local function new_comp(formatWidth,formatHeight)
+    local comp = { list = {}, state = {}, undo = {}, active = nil,
+        frameWidth = formatWidth or 1920, frameHeight = formatHeight or 1080 }
     local flow = {
         Select = function(_, tool, enabled)
             if tool then comp.active = enabled ~= false and tool or nil
@@ -29,8 +30,8 @@ local function new_comp()
     function comp:SetData(key, value) self.state[key] = value end
     function comp:GetToolList() return self.list end
     function comp:GetPrefs(key)
-        if key=="Comp.FrameFormat.Width" then return 1920 end
-        if key=="Comp.FrameFormat.Height" then return 1080 end
+        if key=="Comp.FrameFormat.Width" then return self.frameWidth end
+        if key=="Comp.FrameFormat.Height" then return self.frameHeight end
         return nil
     end
     function comp:SetActiveTool(tool)
@@ -1217,4 +1218,30 @@ expect(clonedRoute.to.sourceId==arrival.id and
 expect(#runtime.inspect(copyComp).objects==8,
        "four originals and four clones remain independent Scene objects")
 
+
+-- Output-pixel stroke geometry is tied to the composition's actual size.
+local resolutionComp=new_comp(3840,2160)
+resolutionComp:AddTool("MediaOut")
+runtime.create(resolutionComp)
+local wideRegion=runtime.add_region(resolutionComp,state,statePolygon)
+local wideStroke=find(resolutionComp,wideRegion,"shape6")
+expect(wideStroke and math.abs(wideStroke.inputs.BorderWidth-1.5/3840)<1e-12,
+       "4K Region default stroke is 1.5 pixels, not a scaled 1080p value")
+expect(wideStroke.expressions.BorderWidth:find("CR2_Camera.Size",1,true),
+       "4K Region stroke stays visually constant during geographic zoom")
+local wideRoute=runtime.add_route(resolutionComp,origin,arrival,{
+    pathType="Straight",name="4K Route"
+})
+local wideControl=find(resolutionComp,wideRoute,"control")
+local wideParts=wideControl:GetData("CartoRigAtomic.RouteSegmentsV2")
+local widePath=find(resolutionComp,wideRoute,wideParts[1].role)
+expect(widePath and math.abs(widePath.inputs.BorderWidth-3/3840)<1e-12,
+       "4K Route default width is exactly 3 output pixels")
+expect(widePath.expressions.BorderWidth:find("CR2_Camera.Size",1,true),
+       "4K Route width scales inversely to the shared Camera")
+local invalidFormatComp=new_comp(0,1080)
+invalidFormatComp:AddTool("MediaOut")
+runtime.create(invalidFormatComp)
+expect_failure(function()runtime.add_region(invalidFormatComp,state,statePolygon)end,
+       "FRAME_FORMAT")
 print("PASS: " .. checks .. " original Fusion graph / Control / Motion assertions")
